@@ -1,0 +1,64 @@
+{
+  "positions": [
+    {
+      "assetId": "AAPL",
+      "amountOfShares": 10.5,
+      "sharePriceOriginalCurrency": 200.0,
+      "amountUSD": 2100.0,
+      "availableAmountOfShares": 10.5,
+      "availableAmountUSD": 2100.0,
+      "unrealizedPL": 150.25,
+      "unrealizedPLPercent": 7.7,
+      "unrealizedDayPL": -3.1,
+      "unrealizedDayPLPercent": -0.15,
+      "lastUpdated": "2026-07-06T14:30:00.000Z",
+      "avgCost": 185.69,
+      "weight": 62.05
+    },
+    {
+      "assetId": "VOO",
+      "amountOfShares": 2.401,
+      "sharePriceOriginalCurrency": 520.93,
+      "amountUSD": 1250.75,
+      "availableAmountOfShares": 2.401,
+      "availableAmountUSD": 1250.753,
+      "unrealizedPL": 300.1,
+      "unrealizedPLPercent": 31.55,
+      "unrealizedDayPL": 5.2,
+      "unrealizedDayPLPercent": 0.42,
+      "lastUpdated": "2026-07-06T14:29:58.000Z",
+      "avgCost": 395.9,
+      "weight": 36.96
+    },
+    {
+      "assetId": "MSFT",
+      "amountOfShares": 0.08123456,
+      "sharePriceOriginalCurrency": 410.35,
+      "amountUSD": 33.333333,
+      "availableAmountOfShares": 0.08123456,
+      "availableAmountUSD": 33.333333,
+      "unrealizedPL": 3.33,
+      "unrealizedPLPercent": 11.09,
+      "unrealizedDayPL": 0.12,
+      "unrealizedDayPLPercent": 0.36,
+      "lastUpdated": "2026-07-06T14:29:55.000Z",
+      "avgCost": 369.32,
+      "weight": 0.99
+    }
+  ],
+  "buyingPower": {
+    "buyingPower": 2500.00,
+    "breakdown": {
+      "cashAvailableForTrade": 2500.00,
+      "cashAvailableForWithdrawal": 65.46,
+      "amountUSD": 2500.00,
+      "cashFromSellsInTransit": 0,
+      "usedDriveWealthValue": true,
+      "isPro": true
+    },
+    "accountContext": {
+      "cashSettling": 0,
+      "tradingType": "CASH"
+    }
+  }
+}

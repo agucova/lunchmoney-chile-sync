@@ -1,0 +1,1 @@
+ALTER TABLE `txn_identities` ADD `billed_date` text;

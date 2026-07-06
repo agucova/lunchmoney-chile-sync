@@ -1,0 +1,32 @@
+{
+  "name": "lunchmoney-chile-sync",
+  "private": true,
+  "description": "Syncs Chilean bank accounts and credit cards into Lunch Money",
+  "license": "MPL-2.0",
+  "type": "module",
+  "module": "src/main.ts",
+  "scripts": {
+    "sync": "bun run src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "test": "bun test",
+    "check": "bun run typecheck && bun run lint && bun run fmt:check && bun test"
+  },
+  "dependencies": {
+    "@optique/core": "^1.1.1",
+    "@optique/run": "^1.1.1",
+    "drizzle-orm": "^0.45.2",
+    "open-banking-chile": "file:vendor/open-banking-chile-2.0.0.tgz",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.31.10",
+    "fast-check": "^4",
+    "oxfmt": "latest",
+    "oxlint": "^1",
+    "typescript": "^5"
+  }
+}

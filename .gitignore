@@ -1,0 +1,52 @@
+# dependencies (bun install / vendor npm install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+# … except the vendored, pinned scraper build (see scripts/update-obc.sh)
+!vendor/*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files — bank credentials live here, never commit
+.env
+.env.*.local
+.env.local
+
+# live config: holds LM account ids and card last-4s (see config.example.toml)
+config.toml
+
+# local state
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# raw bank payloads (unsanitized — may contain personal data)
+fixtures/raw/
+
+# scraper artifacts
+screenshots/
+.obc-profile/
+
+# nix build output
+result
+
+# caches
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store

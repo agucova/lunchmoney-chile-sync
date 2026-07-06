@@ -1,0 +1,49 @@
+{
+  "success": true,
+  "bank": "santander",
+  "accounts": [
+    {
+      "label": null,
+      "balance": 7654321,
+      "movements": [
+        {
+          "date": "2026-06-26",
+          "description": "00775502738 JUNE 2026 PAYROLL",
+          "amount": 4321000,
+          "balance": 7654321,
+          "source": "account"
+        },
+        {
+          "date": "2026-06-25",
+          "description": "COM.MANTENCION PLAN",
+          "amount": -24990,
+          "balance": 3210987,
+          "source": "account"
+        },
+        {
+          "date": "05-07-2026",
+          "description": "PAYU *UBER EA",
+          "amount": -25990,
+          "balance": 0,
+          "source": "credit_card_unbilled"
+        },
+        {
+          "date": "2026-06-21",
+          "description": "PAYU   *UBER TRIP",
+          "amount": -7250,
+          "balance": 0,
+          "source": "credit_card_billed"
+        },
+        {
+          "date": "2026-05-26",
+          "description": "TIENDA CUOTAS",
+          "amount": -10000,
+          "balance": 0,
+          "source": "credit_card_billed",
+          "installments": "02/06"
+        }
+      ]
+    }
+  ],
+  "debug": "sanitized"
+}

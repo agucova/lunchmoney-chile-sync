@@ -1,0 +1,44 @@
+{
+  "success": true,
+  "bank": "bchile",
+  "accounts": [
+    {
+      "label": null,
+      "balance": 1450000,
+      "movements": [
+        {
+          "date": "16-06-2026",
+          "description": "Traspaso A:Persona Uno",
+          "amount": -1000000,
+          "balance": "1450000",
+          "source": "account"
+        },
+        {
+          "date": "08-06-2026",
+          "description": "Traspaso A:Persóna Dos",
+          "amount": -45000,
+          "balance": "1495000",
+          "source": "account"
+        }
+      ]
+    }
+  ],
+  "creditCards": [
+    {
+      "label": "Visa Infinite ****1122",
+      "national": { "used": 0, "available": 5000000, "total": 5000000 },
+      "international": { "used": 0, "available": 2500, "total": 2500, "currency": "USD" },
+      "billingPeriod": null,
+      "nextBillingDate": "29 de julio",
+      "nextDueDate": null,
+      "periodExpenses": 0,
+      "lastStatement": null,
+      "movements": []
+    },
+    {
+      "label": "Visa Signature ****3344",
+      "national": { "used": 0, "available": 1000000, "total": 1000000 },
+      "movements": []
+    }
+  ]
+}

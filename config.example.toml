@@ -1,0 +1,87 @@
+# Copy to config.toml (gitignored — it holds your LM account ids and card last-4s)
+# and fill in. Credentials are env-var references only; secrets live in .env /
+# systemd credentials, never here.
+
+[lunchmoney]
+token_env = "LUNCHMONEY_TOKEN"
+
+[state]
+db_path = "state.sqlite"
+
+# One connection per credential set. A single connection surfaces several
+# sub-accounts (e.g. Santander: checking + credit cards from one login).
+[connections.santander]
+type = "obc"
+obc_bank = "santander"
+rut_env = "SANTANDER_RUT"
+password_env = "SANTANDER_PASS"
+
+[connections.bchile]
+type = "obc"
+obc_bank = "bchile"
+rut_env = "BANCOCHILE_RUT"
+password_env = "BANCOCHILE_PASS"
+
+# Racional.cl brokerage (Firebase auth). One login, two balance sub-accounts: stocks
+# and cash. device_id_env must reference a Racional-trusted device UUID.
+[connections.racional]
+type = "racional"
+email_env = "RACIONAL_EMAIL"
+password_env = "RACIONAL_PASS"
+device_id_env = "RACIONAL_DEVICE_ID"
+
+# `sources` is ordered: first is primary, the rest are fallbacks.
+[[accounts]]
+id = "santander-checking"
+connection = "santander"
+kind = "checking"
+currency = "CLP"
+lm_account_id = 100001
+sources = ["obc"]
+
+[[accounts]]
+id = "bchile-checking"
+connection = "bchile"
+kind = "checking"
+currency = "CLP"
+lm_account_id = 100002
+sources = ["obc"]
+
+# Santander's flat scraper shape exposes one unlabeled card sub-account (no
+# match.card_last4 needed); nested shapes (Banco de Chile) need match.card_last4.
+[[accounts]]
+id = "santander-cc"
+connection = "santander"
+kind = "credit_card"
+currency = "CLP"
+lm_account_id = 100003
+sources = ["obc"]
+
+[[accounts]]
+id = "bchile-cc"
+connection = "bchile"
+kind = "credit_card"
+currency = "CLP"
+lm_account_id = 100004
+sources = ["obc"]
+match = { card_last4 = "0000" }
+
+# Racional balances are native USD. match.sub selects which facet of the single
+# fetch maps to each asset.
+[[accounts]]
+id = "racional-stocks"
+connection = "racional"
+kind = "investment"
+currency = "USD"
+lm_account_id = 100005
+sources = ["racional"]
+match = { sub = "stocks" }
+
+[[accounts]]
+id = "racional-cash"
+connection = "racional"
+kind = "investment"
+currency = "USD"
+lm_account_id = 100006
+sources = ["racional"]
+match = { sub = "cash" }
