@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import {
+  addDays,
   assertIsoDate,
   assertPlausibleDates,
   daysBetween,
   parseBankDate,
+  parseBankDateAny,
   todayInSantiago,
 } from "../src/core/dates.ts";
 import { SchemaDriftError } from "../src/core/errors.ts";
@@ -16,6 +18,13 @@ describe("parseBankDate", () => {
     // A dd-mm value in a declared-ISO context must throw, and vice versa.
     expect(() => parseBankDate("05-07-2026", "iso")).toThrow(SchemaDriftError);
     expect(() => parseBankDate("2026-07-05", "dd-mm-yyyy")).toThrow(SchemaDriftError);
+  });
+
+  test("slash-separated dd/mm/yyyy (Santander card feeds) parses and stays declared", () => {
+    expect(String(parseBankDate("01/07/2026", "dd/mm/yyyy"))).toBe("2026-07-01");
+    expect(() => parseBankDate("01-07-2026", "dd/mm/yyyy")).toThrow(SchemaDriftError);
+    expect(() => parseBankDate("01/07/2026", "dd-mm-yyyy")).toThrow(SchemaDriftError);
+    expect(() => parseBankDate("30/02/2026", "dd/mm/yyyy")).toThrow(SchemaDriftError);
   });
 
   test("impossible calendar dates are rejected in both formats", () => {
@@ -47,6 +56,27 @@ describe("parseBankDate", () => {
   });
 });
 
+describe("parseBankDateAny", () => {
+  test("a declared format set accepts either disjoint syntax", () => {
+    expect(String(parseBankDateAny("2026-07-01", ["iso", "dd-mm-yyyy"]))).toBe("2026-07-01");
+    expect(String(parseBankDateAny("01-07-2026", ["iso", "dd-mm-yyyy"]))).toBe("2026-07-01");
+  });
+
+  test("a value matching no declared format is SchemaDrift", () => {
+    expect(() => parseBankDateAny("01/07/2026", ["iso", "dd-mm-yyyy"])).toThrow(SchemaDriftError);
+    expect(() => parseBankDateAny("2026-07-01T00:00:00Z", ["iso", "dd-mm-yyyy"])).toThrow(
+      SchemaDriftError,
+    );
+  });
+
+  test("single-format sets behave like parseBankDate", () => {
+    expect(String(parseBankDateAny("2026-06-21", ["iso"]))).toBe("2026-06-21");
+    expect(() => parseBankDateAny("21-06-2026", ["iso"])).toThrow(SchemaDriftError);
+    expect(String(parseBankDateAny("21-06-2026", ["dd-mm-yyyy"]))).toBe("2026-06-21");
+    expect(() => parseBankDateAny("2026-06-21", ["dd-mm-yyyy"])).toThrow(SchemaDriftError);
+  });
+});
+
 describe("plausibility window", () => {
   const today = assertIsoDate("2026-07-06");
 
@@ -72,6 +102,20 @@ describe("daysBetween", () => {
     expect(daysBetween(assertIsoDate("2026-07-05"), assertIsoDate("2026-07-06"))).toBe(1);
     expect(daysBetween(assertIsoDate("2026-07-06"), assertIsoDate("2026-07-05"))).toBe(-1);
     expect(daysBetween(assertIsoDate("2026-02-28"), assertIsoDate("2026-03-01"))).toBe(1);
+  });
+});
+
+describe("addDays", () => {
+  test("shifts across month and year boundaries; inverse of daysBetween", () => {
+    expect(String(addDays(assertIsoDate("2026-07-06"), -60))).toBe("2026-05-07");
+    expect(String(addDays(assertIsoDate("2026-01-01"), -1))).toBe("2025-12-31");
+    expect(String(addDays(assertIsoDate("2026-02-28"), 1))).toBe("2026-03-01");
+    fc.assert(
+      fc.property(fc.integer({ min: -1000, max: 1000 }), (days) => {
+        const base = assertIsoDate("2026-07-06");
+        expect(daysBetween(base, addDays(base, days))).toBe(days);
+      }),
+    );
   });
 });
 

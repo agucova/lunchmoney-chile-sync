@@ -1,0 +1,257 @@
+{
+  "__comment": "Sanitized golden fixtures for Santander's native JSON API, format-faithful to the 2026-07 HAR capture. All identifiers, names, merchants and amounts are fictional.",
+  "inventory": {
+    "METADATA": { "STATUS": "0", "DESCRIPCION": "OK" },
+    "DATA": {
+      "OUTPUT": {
+        "INFO": {
+          "CODERR": "00",
+          "DESERR": "PEGM. 00-Operación exitosa.",
+          "MSGUSUARIO": "Operación exitosa."
+        },
+        "ESCALARES": { "NOMBREPERSONA": "MARIA", "GLSEGMENTO": "PREFERENTE" },
+        "MATRICES": {
+          "MATRIZCAPTACIONES": {
+            "e1": [
+              {
+                "NUMEROCONTRATO": "000012345678",
+                "PRODUCTO": "10",
+                "SUBPRODUCTO": "0001",
+                "MONTODISPONIBLE": "000000000532498500",
+                "MONTOUTILIZADO": "000000000000000000",
+                "GLOSACORTA": "CUENTA CORRIENTE",
+                "OFICINACONTRATO": "0123",
+                "CUPO": "000000000532498500",
+                "GLOSAESTADO": "ACTIVA",
+                "NUMEROPAN": "L01234567890123456",
+                "ESTADOOPERACION": "A",
+                "ESTADORELACION": "A",
+                "CODIGOMONEDA": "CLP",
+                "AGRUPACIONCOMERCIAL": "CCC",
+                "CALIDADPARTICIPACION": "TI"
+              },
+              {
+                "NUMEROCONTRATO": "000012345679",
+                "PRODUCTO": "20",
+                "SUBPRODUCTO": "0002",
+                "MONTODISPONIBLE": "000000000150000000",
+                "MONTOUTILIZADO": "000000000000000000",
+                "GLOSACORTA": "LINEA CDTO PERSONAS",
+                "OFICINACONTRATO": "0123",
+                "CUPO": "000000000150000000",
+                "GLOSAESTADO": "ACTIVA",
+                "NUMEROPAN": "00000000000000000",
+                "ESTADOOPERACION": "A",
+                "ESTADORELACION": "A",
+                "CODIGOMONEDA": "CLP",
+                "AGRUPACIONCOMERCIAL": "LCR",
+                "CALIDADPARTICIPACION": "TI"
+              },
+              {
+                "NUMEROCONTRATO": "000012345680",
+                "PRODUCTO": "10",
+                "SUBPRODUCTO": "0003",
+                "MONTODISPONIBLE": "000000000000264335",
+                "MONTOUTILIZADO": "000000000000000000",
+                "GLOSACORTA": "CTA CORRIENTE MX",
+                "OFICINACONTRATO": "0123",
+                "CUPO": "000000000000264335",
+                "GLOSAESTADO": "ACTIVA",
+                "NUMEROPAN": "00000000000000000",
+                "ESTADOOPERACION": "A",
+                "ESTADORELACION": "A",
+                "CODIGOMONEDA": "USD",
+                "AGRUPACIONCOMERCIAL": "CCC",
+                "CALIDADPARTICIPACION": "TI"
+              },
+              {
+                "NUMEROCONTRATO": "000098765432",
+                "PRODUCTO": "30",
+                "SUBPRODUCTO": "0004",
+                "MONTODISPONIBLE": "000000000408073500",
+                "MONTOUTILIZADO": "000000000291926500",
+                "GLOSACORTA": "W. LIMITED VISA",
+                "OFICINACONTRATO": "0123",
+                "CUPO": "000000000700000000",
+                "GLOSAESTADO": "VIGENTE",
+                "NUMEROPAN": "00000000000004321",
+                "ESTADOOPERACION": "A",
+                "ESTADORELACION": "A",
+                "CODIGOMONEDA": "CLP",
+                "AGRUPACIONCOMERCIAL": "TCR",
+                "CALIDADPARTICIPACION": "TI"
+              },
+              {
+                "NUMEROCONTRATO": "000098765432",
+                "PRODUCTO": "30",
+                "SUBPRODUCTO": "0004",
+                "MONTODISPONIBLE": "000000000000264335",
+                "MONTOUTILIZADO": "000000000000435665",
+                "GLOSACORTA": "W. LIMITED VISA",
+                "OFICINACONTRATO": "0123",
+                "CUPO": "000000000000700000",
+                "GLOSAESTADO": "VIGENTE",
+                "NUMEROPAN": "00000000000004321",
+                "ESTADOOPERACION": "A",
+                "ESTADORELACION": "A",
+                "CODIGOMONEDA": "USD",
+                "AGRUPACIONCOMERCIAL": "TCR",
+                "CALIDADPARTICIPACION": "TI"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "checkingWithMovements": {
+    "additionalInfo": [
+      { "key": "code-ms", "value": "00" },
+      { "key": "message-ms", "value": "" }
+    ],
+    "movements": [
+      {
+        "accountingDate": "2026-06-30",
+        "transactionDate": "2026-06-29",
+        "operationTime": "1015",
+        "newBalance": "000000608261400",
+        "codeOperationMovement": "0060",
+        "movementAmount": "000000123456700",
+        "observation": "00775502738 JUNE 2026 PAYROLL",
+        "expandedCode": "Pago de Remuneraciones",
+        "movementNumber": "000000001",
+        "chargePaymentFlag": "H"
+      },
+      {
+        "accountingDate": "2026-07-01",
+        "transactionDate": "2026-07-01",
+        "operationTime": "1530",
+        "newBalance": "000000583261400",
+        "codeOperationMovement": "0071",
+        "movementAmount": "00000025000000-",
+        "observation": "0105109725 TRANSF A JUAN PEREZ",
+        "expandedCode": "Traspaso a Cuenta de Otro Banco",
+        "movementNumber": "000000002",
+        "chargePaymentFlag": "D"
+      },
+      {
+        "accountingDate": "2026-07-02",
+        "transactionDate": "2026-07-02",
+        "operationTime": "0800",
+        "newBalance": "000000582905400",
+        "codeOperationMovement": "0055",
+        "movementAmount": "000000000356000-",
+        "observation": " ",
+        "expandedCode": "Comisión Plan",
+        "movementNumber": "000000003",
+        "chargePaymentFlag": "D"
+      }
+    ]
+  },
+  "checkingEmptyOk": {
+    "additionalInfo": [
+      { "key": "code-ms", "value": "00" },
+      { "key": "message-ms", "value": "" }
+    ]
+  },
+  "checkingNoData": {
+    "additionalInfo": [
+      { "key": "code-ms", "value": "BGE0071" },
+      { "key": "message-ms", "value": "NO EXISTEN DATOS" }
+    ]
+  },
+  "cardClp": {
+    "METADATA": { "STATUS": "0", "DESCRIPCION": "OK" },
+    "DATA": {
+      "Informacion": {
+        "Codigo": "00",
+        "Resultado": "OK. OPERACION EFECTUADA",
+        "Mensaje": "Operación exitosa"
+      },
+      "MatrizMovimientos": [
+        {
+          "Fecha": "28/06/2026",
+          "Descripcion": "SALDO INICIAL",
+          "Comercio": null,
+          "Importe": "430.960",
+          "DescripcionRubro": null,
+          "Ciudad": null,
+          "TipoBen": null,
+          "IndicadorDebeHaber": "D"
+        },
+        {
+          "Fecha": "29/06/2026",
+          "Descripcion": "COMPRA NACIONAL POR INTERNET",
+          "Comercio": "PAYU *TRANSPORTE",
+          "Importe": "11.994",
+          "DescripcionRubro": null,
+          "Ciudad": "SANTIAGO",
+          "TipoBen": null,
+          "IndicadorDebeHaber": "D"
+        },
+        {
+          "Fecha": "30/06/2026",
+          "Descripcion": "PAGO PESOS",
+          "Comercio": null,
+          "Importe": "1.430.960",
+          "DescripcionRubro": null,
+          "Ciudad": null,
+          "TipoBen": null,
+          "IndicadorDebeHaber": "H"
+        },
+        {
+          "Fecha": "01/07/2026",
+          "Descripcion": "COMPRA NACIONAL",
+          "Comercio": "MERPAGO *CAFETERIA",
+          "Importe": "990",
+          "DescripcionRubro": null,
+          "Ciudad": "SANTIAGO",
+          "TipoBen": null,
+          "IndicadorDebeHaber": "D"
+        }
+      ]
+    }
+  },
+  "cardUsd": {
+    "METADATA": { "STATUS": "0", "DESCRIPCION": "OK" },
+    "DATA": {
+      "Informacion": {
+        "Codigo": "00",
+        "Resultado": "OK. OPERACION EFECTUADA",
+        "Mensaje": "Operación exitosa"
+      },
+      "MatrizMovimientos": [
+        {
+          "Fecha": "28/06/2026",
+          "Descripcion": "SALDO INICIAL",
+          "Comercio": null,
+          "Importe": "1.234,56",
+          "DescripcionRubro": null,
+          "Ciudad": null,
+          "TipoBen": null,
+          "IndicadorDebeHaber": "D"
+        },
+        {
+          "Fecha": "29/06/2026",
+          "Descripcion": "COMPRA INTERNACIONAL",
+          "Comercio": "EXAMPLE.COM/BILL",
+          "Importe": "16,32",
+          "DescripcionRubro": null,
+          "Ciudad": "866-712-7753",
+          "TipoBen": null,
+          "IndicadorDebeHaber": "D"
+        },
+        {
+          "Fecha": "01/07/2026",
+          "Descripcion": "COMPRA INTERNACIONAL",
+          "Comercio": "SAAS SUBSCRIPTION",
+          "Importe": "100,00",
+          "DescripcionRubro": null,
+          "Ciudad": null,
+          "TipoBen": null,
+          "IndicadorDebeHaber": "D"
+        }
+      ]
+    }
+  }
+}

@@ -12,7 +12,7 @@
 //      "000000532498500" → 5 324 985.00;  "00000250000000-" → −250 000.00.
 
 import { CURRENCY_EXPONENT, type CurrencyCode, Money } from "../../core/money.ts";
-import { invariant } from "../../core/errors.ts";
+import { SchemaDriftError } from "../../core/errors.ts";
 
 /** D = cargo (debit, negative), H = abono (credit, positive). */
 export type DebitCreditFlag = "D" | "H";
@@ -30,9 +30,11 @@ export function parseChileanDisplayAmount(
   currency: CurrencyCode,
 ): Money {
   const trimmed = importe.trim();
-  invariant(CHILEAN_RE.test(trimmed), `unparseable Chilean amount: ${JSON.stringify(importe)}`);
+  if (!CHILEAN_RE.test(trimmed)) {
+    throw new SchemaDriftError(`unparseable Chilean amount: ${JSON.stringify(importe)}`);
+  }
   const canonical = trimmed.replace(/\./g, "").replace(",", ".");
-  const magnitude = Money.fromDecimalString(canonical, currency);
+  const magnitude = decimalOrDrift(canonical, currency, importe);
   return flag === "D" ? magnitude.negate() : magnitude;
 }
 
@@ -46,7 +48,7 @@ const CENTAVOS_RE = /^(\d+)(-?)$/;
  */
 export function parseCentavos(raw: string, currency: CurrencyCode): Money {
   const match = CENTAVOS_RE.exec(raw.trim());
-  invariant(match, `unparseable centavos field: ${JSON.stringify(raw)}`);
+  if (!match) throw new SchemaDriftError(`unparseable centavos field: ${JSON.stringify(raw)}`);
   const digits = match[1] as string;
   const negative = match[2] === "-";
   const padded = digits.padStart(3, "0"); // ensure ≥1 integer digit + 2 fractional
@@ -55,7 +57,7 @@ export function parseCentavos(raw: string, currency: CurrencyCode): Money {
   const exponent = CURRENCY_EXPONENT[currency];
   const canonical =
     exponent >= 2 ? `${intPart}.${fracPart}` : mergeToExponent(intPart, fracPart, exponent);
-  const magnitude = Money.fromDecimalString(canonical, currency);
+  const magnitude = decimalOrDrift(canonical, currency, raw);
   return negative ? magnitude.negate() : magnitude;
 }
 
@@ -63,9 +65,25 @@ export function parseCentavos(raw: string, currency: CurrencyCode): Money {
 function mergeToExponent(intPart: string, fracPart: string, exponent: number): string {
   const keep = fracPart.slice(0, exponent);
   const drop = fracPart.slice(exponent);
-  invariant(
-    /^0*$/.test(drop),
-    `centavos field has sub-unit precision for a ${exponent}-decimal currency: .${fracPart}`,
-  );
+  if (!/^0*$/.test(drop)) {
+    throw new SchemaDriftError(
+      `centavos field has sub-unit precision for a ${exponent}-decimal currency: .${fracPart}`,
+    );
+  }
   return exponent === 0 ? intPart : `${intPart}.${keep}`;
+}
+
+/** Money construction re-thrown as drift: the offending input is bank data, not our bug. */
+function decimalOrDrift(canonical: string, currency: CurrencyCode, raw: string): Money {
+  try {
+    return Money.fromDecimalString(canonical, currency);
+  } catch (err) {
+    throw new SchemaDriftError(
+      `bank amount ${JSON.stringify(raw)} does not fit ${currency}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      undefined,
+      err,
+    );
+  }
 }

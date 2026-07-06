@@ -2,7 +2,7 @@
 // from the live HAR capture; properties assert no float path and exact round-trips.
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
-import { InvariantViolation } from "../src/core/errors.ts";
+import { SchemaDriftError } from "../src/core/errors.ts";
 import { parseCentavos, parseChileanDisplayAmount } from "../src/adapters/santander/amounts.ts";
 
 describe("parseChileanDisplayAmount (card Importe)", () => {
@@ -21,12 +21,12 @@ describe("parseChileanDisplayAmount (card Importe)", () => {
   });
 
   test("CLP rejects a fractional (comma) amount — pesos have no cents", () => {
-    expect(() => parseChileanDisplayAmount("10,80", "D", "CLP")).toThrow(InvariantViolation);
+    expect(() => parseChileanDisplayAmount("10,80", "D", "CLP")).toThrow(SchemaDriftError);
   });
 
   test("garbage is rejected, not coerced", () => {
     for (const bad of ["", "1,2,3", "1.99.9", "abc", "10.80", "-5"]) {
-      expect(() => parseChileanDisplayAmount(bad, "D", "USD")).toThrow(InvariantViolation);
+      expect(() => parseChileanDisplayAmount(bad, "D", "USD")).toThrow(SchemaDriftError);
     }
   });
 });
@@ -45,7 +45,7 @@ describe("parseCentavos (checking movementAmount / balances)", () => {
   });
 
   test("a CLP centavos field with non-zero cents is schema drift", () => {
-    expect(() => parseCentavos("000000000000000150", "CLP")).toThrow(InvariantViolation);
+    expect(() => parseCentavos("000000000000000150", "CLP")).toThrow(SchemaDriftError);
   });
 
   test("property: CLP centavos round-trips digits/100 exactly, no float", () => {

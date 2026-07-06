@@ -8,10 +8,11 @@ import { SchemaDriftError, invariant } from "./errors.ts";
 /** Canonical ISO date, e.g. "2026-07-05". */
 export type IsoDate = string & { readonly __brand: "IsoDate" };
 
-export type BankDateFormat = "iso" | "dd-mm-yyyy";
+export type BankDateFormat = "iso" | "dd-mm-yyyy" | "dd/mm/yyyy";
 
 const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DDMM_RE = /^(\d{2})-(\d{2})-(\d{4})$/;
+const DDMM_SLASH_RE = /^(\d{2})\/(\d{2})\/(\d{4})$/;
 
 function daysInMonth(year: number, month: number): number {
   // month is 1-based; Date.UTC day 0 of next month = last day of this month
@@ -38,9 +39,45 @@ export function parseBankDate(raw: string, format: BankDateFormat): IsoDate {
     if (!m) throw new SchemaDriftError(`expected ISO date, got ${JSON.stringify(raw)}`);
     return checkedIso(Number(m[1]), Number(m[2]), Number(m[3]), raw);
   }
-  const m = DDMM_RE.exec(value);
-  if (!m) throw new SchemaDriftError(`expected dd-mm-yyyy date, got ${JSON.stringify(raw)}`);
+  const m = FORMAT_RES[format].exec(value);
+  if (!m) throw new SchemaDriftError(`expected ${format} date, got ${JSON.stringify(raw)}`);
   return checkedIso(Number(m[3]), Number(m[2]), Number(m[1]), raw);
+}
+
+const FORMAT_RES: Record<BankDateFormat, RegExp> = {
+  iso: ISO_RE,
+  "dd-mm-yyyy": DDMM_RE,
+  "dd/mm/yyyy": DDMM_SLASH_RE,
+};
+
+export function matchesBankDateFormat(value: string, format: BankDateFormat): boolean {
+  return FORMAT_RES[format].test(value);
+}
+
+/**
+ * Parse a bank-emitted date against a declared SET of admissible formats — for sources
+ * whose format is path-dependent upstream (e.g. BCI account movements arrive ISO from the
+ * intercepted API but dd-mm-yyyy from the HTML fallback). The set is still a declaration,
+ * not sniffing: exactly one declared format may syntactically match, anything else is drift.
+ */
+export function parseBankDateAny(
+  raw: string,
+  formats: readonly [BankDateFormat, ...BankDateFormat[]],
+): IsoDate {
+  const value = raw.trim();
+  const matching = formats.filter((format) => matchesBankDateFormat(value, format));
+  if (matching.length === 0) {
+    throw new SchemaDriftError(
+      `date ${JSON.stringify(raw)} matches none of the declared formats [${formats.join(", ")}]`,
+    );
+  }
+  const format = matching[0];
+  if (matching.length > 1 || format === undefined) {
+    throw new SchemaDriftError(
+      `date ${JSON.stringify(raw)} is ambiguous across declared formats [${formats.join(", ")}]`,
+    );
+  }
+  return parseBankDate(value, format);
 }
 
 export function isIsoDate(value: string): value is IsoDate {
@@ -57,6 +94,15 @@ export function compareIsoDates(a: IsoDate, b: IsoDate): -1 | 0 | 1 {
   if (a < b) return -1;
   if (a > b) return 1;
   return 0;
+}
+
+/** An ISO date shifted by a (possibly negative) number of days. */
+export function addDays(date: IsoDate, days: number): IsoDate {
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+  const shifted = new Date(Date.UTC(y, m - 1, d + days));
+  const mm = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${shifted.getUTCFullYear()}-${mm}-${dd}` as IsoDate;
 }
 
 /** Days between two ISO dates (b - a), for date-window matching. */
