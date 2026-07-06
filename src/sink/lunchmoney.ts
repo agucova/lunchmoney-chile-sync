@@ -139,7 +139,7 @@ export class LunchMoneyClient {
    * balance_as_of from a balance-only PUT (verified — it keeps the prior date), so we send
    * it explicitly; otherwise the asset shows a fresh balance under a stale date.
    */
-  async setBalance(lmAccountId: number, balance: Money, asOf: IsoDate): Promise<void> {
+  async setBalance(lmAccountId: number, balance: Money, asOf: string): Promise<void> {
     await this.request("PUT", `/manual_accounts/${lmAccountId}`, {
       balance: balance.toDecimalString(),
       balance_as_of: asOf,

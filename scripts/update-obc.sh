@@ -5,7 +5,9 @@
 set -euo pipefail
 
 PIN="${1:-085faafd}"
-REPO="https://github.com/kaihv/open-banking-chile.git"
+# Override to build from a fork, e.g.:
+#   OBC_REPO=https://github.com/agucova/open-banking-chile.git scripts/update-obc.sh santander-usd-legs
+REPO="${OBC_REPO:-https://github.com/kaihv/open-banking-chile.git}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
