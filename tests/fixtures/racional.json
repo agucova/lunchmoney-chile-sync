@@ -47,11 +47,11 @@
     }
   ],
   "buyingPower": {
-    "buyingPower": 2500.00,
+    "buyingPower": 2500.0,
     "breakdown": {
-      "cashAvailableForTrade": 2500.00,
+      "cashAvailableForTrade": 2500.0,
       "cashAvailableForWithdrawal": 65.46,
-      "amountUSD": 2500.00,
+      "amountUSD": 2500.0,
       "cashFromSellsInTransit": 0,
       "usedDriveWealthValue": true,
       "isPro": true

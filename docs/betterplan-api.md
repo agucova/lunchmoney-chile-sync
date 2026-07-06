@@ -27,17 +27,18 @@ decoder), `proto_schema.py` (cross-chunk schema extractor from the JS bundle), `
 
 ## Hosts
 
-| host | role |
-|---|---|
-| `id.betterplan.cl` | IdentityServer4/Duende OIDC (auth, tokens, JWKS, userinfo) |
-| `grpc.betterplan.cl` | all data — gRPC-web, behind Cloudflare |
-| `portal.betterplan.cl` | Angular SPA (static chunks, i18n) |
+| host                   | role                                                       |
+| ---------------------- | ---------------------------------------------------------- |
+| `id.betterplan.cl`     | IdentityServer4/Duende OIDC (auth, tokens, JWKS, userinfo) |
+| `grpc.betterplan.cl`   | all data — gRPC-web, behind Cloudflare                     |
+| `portal.betterplan.cl` | Angular SPA (static chunks, i18n)                          |
 
 Everything else in the HAR (Datadog, Sentry, Intercom, a Supabase status ping) is telemetry.
 
 ## Authentication
 
 OIDC discovery: `GET https://id.betterplan.cl/.well-known/openid-configuration`.
+
 - `token_endpoint` = `https://id.betterplan.cl/connect/token`
 - `authorization_endpoint` = `https://id.betterplan.cl/connect/authorize`
 - Public client **`portal-ts-code`** (no secret), authorization_code + PKCE for interactive login.
@@ -69,6 +70,7 @@ OIDC discovery: `GET https://id.betterplan.cl/.well-known/openid-configuration`.
    near expiry (or on a 401), minimizing rotation churn.
 
 **Ruled out empirically:**
+
 - **ROPC / password grant** → `{"error":"unauthorized_client"}` for `portal-ts-code`, even though
   the server advertises `password` in `grant_types_supported`. Do not store raw credentials.
 - Scripted headless authorization_code login is possible but fragile (login-form antiforgery +
@@ -132,33 +134,34 @@ value}`, **`Timestamp`** = `{1: seconds, 2: nanos}`, **`StringValue`** = `{1: va
 means a nested message of type T.
 
 ### `common_message.GoalModel` — the holding (⇐ the important one)
-| # | name | type | notes |
-|---|---|---|---|
-| 2 | initialInvestment | int32 | |
-| 3 | monthlyContribution | int32 | |
-| **4** | **currentCapital** | **double** | **BALANCE, in goal currency. Absent ⇒ 0.** |
-| 5 | amountsTransactionsPending | double | pending in-flight amount |
-| 6 | currentContribution | double | net deposits / aporte neto (absent ⇒ 0) |
-| 7 | dateOfCompletion | string | target date (ISO) |
-| 8 | progress | double | 0–1 |
-| 9 | state | string | e.g. `ready` |
-| 11 | targetAmount | int32 | goal target ("monto objetivo") |
-| 14 | title | string | **goal name** |
-| 18 | id | int32 | **goal id** (used by Irr/GetCurrentFundings/GetMe predicate) |
-| 19 | userId | int32 | |
-| 22 | goalCategoryId | int32 | |
-| 25 | portfolioId | →Int32Value | **portfolio id** |
-| 28 | financialEntity | →FinancialEntityModel | broker |
-| 30 | portfolio | →PortfolioModel | strategy; positions containers empty unless `include`d |
-| 31 | currency | →CurrencyModel | **goal currency** |
-| 32 | goalCategory | →GoalCategoryModel | e.g. `general-investments`, `fondo-de-emergencia` |
-| 33 | archived | bool | |
-| 38 | riskLevel | →RiskLevelModel | e.g. "Muy arriesgado" |
-| 39 | displayCurrency | →CurrencyModel | |
-| 40 | investmentStrategy | →InvestmentStrategyModel | e.g. "Flexifolios US", "Caja Pesos" |
-| 49 | goalType | enum | |
-| 50 | biceAccountNumber | string | |
-| 51 | hidden | bool | |
+
+| #     | name                       | type                     | notes                                                        |
+| ----- | -------------------------- | ------------------------ | ------------------------------------------------------------ |
+| 2     | initialInvestment          | int32                    |                                                              |
+| 3     | monthlyContribution        | int32                    |                                                              |
+| **4** | **currentCapital**         | **double**               | **BALANCE, in goal currency. Absent ⇒ 0.**                   |
+| 5     | amountsTransactionsPending | double                   | pending in-flight amount                                     |
+| 6     | currentContribution        | double                   | net deposits / aporte neto (absent ⇒ 0)                      |
+| 7     | dateOfCompletion           | string                   | target date (ISO)                                            |
+| 8     | progress                   | double                   | 0–1                                                          |
+| 9     | state                      | string                   | e.g. `ready`                                                 |
+| 11    | targetAmount               | int32                    | goal target ("monto objetivo")                               |
+| 14    | title                      | string                   | **goal name**                                                |
+| 18    | id                         | int32                    | **goal id** (used by Irr/GetCurrentFundings/GetMe predicate) |
+| 19    | userId                     | int32                    |                                                              |
+| 22    | goalCategoryId             | int32                    |                                                              |
+| 25    | portfolioId                | →Int32Value              | **portfolio id**                                             |
+| 28    | financialEntity            | →FinancialEntityModel    | broker                                                       |
+| 30    | portfolio                  | →PortfolioModel          | strategy; positions containers empty unless `include`d       |
+| 31    | currency                   | →CurrencyModel           | **goal currency**                                            |
+| 32    | goalCategory               | →GoalCategoryModel       | e.g. `general-investments`, `fondo-de-emergencia`            |
+| 33    | archived                   | bool                     |                                                              |
+| 38    | riskLevel                  | →RiskLevelModel          | e.g. "Muy arriesgado"                                        |
+| 39    | displayCurrency            | →CurrencyModel           |                                                              |
+| 40    | investmentStrategy         | →InvestmentStrategyModel | e.g. "Flexifolios US", "Caja Pesos"                          |
+| 49    | goalType                   | enum                     |                                                              |
+| 50    | biceAccountNumber          | string                   |                                                              |
+| 51    | hidden                     | bool                     |                                                              |
 
 (Also present: 1 years, 12 signedContract, 13 haveDeposited, 15 haveRequestDeposited, 16
 waitingContractApproval, 17 starred, 20/21 created/modified, 23 riskLevelId, 24 financialEntityId,
@@ -167,41 +170,44 @@ displayCurrencyId, 41 enabledEdit, 42 firstTransactionDate, 43/44 imageLarge/Sma
 balance/sale flags, 48 apvConfiguration.)
 
 ### `common_message.CurrencyModel`
-| # | name | notes |
-|---|---|---|
-| 1 | id | 1=CLP, 2=USD, 3=UF, 4=EUR |
-| 4 | name | "Pesos" / "Dólares" |
-| 5 | uuid | "peso_chileno" / "dolar" |
-| **9** | **currencyCode** | **ISO — "CLP" / "USD"** |
-| 10 | display | "$" / "USD " |
-| 11 | digitsInfo | Angular format → **exponent**: CLP `"1.0-0"` = 0 decimals, USD `"1.2-2"` = 2 |
-| 12 | locale | |
-| 15 | vectorCode | |
+
+| #     | name             | notes                                                                        |
+| ----- | ---------------- | ---------------------------------------------------------------------------- |
+| 1     | id               | 1=CLP, 2=USD, 3=UF, 4=EUR                                                    |
+| 4     | name             | "Pesos" / "Dólares"                                                          |
+| 5     | uuid             | "peso_chileno" / "dolar"                                                     |
+| **9** | **currencyCode** | **ISO — "CLP" / "USD"**                                                      |
+| 10    | display          | "$" / "USD "                                                                 |
+| 11    | digitsInfo       | Angular format → **exponent**: CLP `"1.0-0"` = 0 decimals, USD `"1.2-2"` = 2 |
+| 12    | locale           |                                                                              |
+| 15    | vectorCode       |                                                                              |
 
 `digitsInfo` is the authoritative decimal count → maps directly to `src/core/money.ts` exponents
 (CLP exp 0, USD exp 2).
 
 ### `common_message.FinancialEntityModel`
-| # | name | notes |
-|---|---|---|
-| 1 | id | 3 = Vector/Betterplan (CLP), 4 = IBKR/BetterplanUS (USD) |
-| 9 | title | "Vector Capital" / "Interactive Brokers" |
-| 10 | shortTitle | "Betterplan" / "BetterplanUS" |
-| 12 | uuid | "vector" / "bp-us" |
-| 15 | defaultCurrencyId | |
-| 16 | defaultCurrency | →CurrencyModel |
-| 19 | hasBalance | bool |
+
+| #   | name              | notes                                                    |
+| --- | ----------------- | -------------------------------------------------------- |
+| 1   | id                | 3 = Vector/Betterplan (CLP), 4 = IBKR/BetterplanUS (USD) |
+| 9   | title             | "Vector Capital" / "Interactive Brokers"                 |
+| 10  | shortTitle        | "Betterplan" / "BetterplanUS"                            |
+| 12  | uuid              | "vector" / "bp-us"                                       |
+| 15  | defaultCurrencyId |                                                          |
+| 16  | defaultCurrency   | →CurrencyModel                                           |
+| 19  | hasBalance        | bool                                                     |
 
 ### `common_message.PortfolioModel` (goal.field 30) — holds positions
-| # | name | notes |
-|---|---|---|
-| 1 | id | portfolio id |
-| 6 | uuid | UUID for investment portfolios; `portfolio-caja-moneda*` slug for **cash** |
-| 7 | title | e.g. "Flexifolio … Muy arriesgado", "Portafolio cuenta moneda pesos" |
-| 13 | investmentStrategyId | |
-| 17 | portfolioFunding | repeated PortfolioFundingModel (empty unless requested) |
-| 23 | portfolioComposition | repeated PortfolioCompositionModel (empty unless requested) |
-| 24 | bpComission | double — fee (e.g. 0.83) |
+
+| #   | name                 | notes                                                                      |
+| --- | -------------------- | -------------------------------------------------------------------------- |
+| 1   | id                   | portfolio id                                                               |
+| 6   | uuid                 | UUID for investment portfolios; `portfolio-caja-moneda*` slug for **cash** |
+| 7   | title                | e.g. "Flexifolio … Muy arriesgado", "Portafolio cuenta moneda pesos"       |
+| 13  | investmentStrategyId |                                                                            |
+| 17  | portfolioFunding     | repeated PortfolioFundingModel (empty unless requested)                    |
+| 23  | portfolioComposition | repeated PortfolioCompositionModel (empty unless requested)                |
+| 24  | bpComission          | double — fee (e.g. 0.83)                                                   |
 
 ### Positions
 
@@ -230,6 +236,7 @@ Response `GetCurrentFundingsResponse {1: repeated FundingProfitabilityValueModel
 Live example (goal 34876): 99.36% "Acciones de Países Desarrollados", 0.64% "Caja".
 
 ### Request envelope for `GetMe`/`ListMe`
+
 `common_message.BaseGetRequest {1: WhereGetRequest where, 2: string include}`, where
 `WhereGetRequest {1: StringValue predicate, 2: StringValue order}`. `predicate` is a **dynamic-LINQ**
 string (`"id == 34876"`). `include` is an EF-style relation list that controls which nested messages
@@ -245,17 +252,18 @@ matching Vector; and `user.GetMeSummary.field2` (grand total, CLP) matched
 on 2026-07-06 returned a fresh patrimony (14 888 645 CLP vs the HAR's 14 698 210) — i.e. real,
 current market values.
 
-| goal id | title | currentCapital | cur | portfolio uuid | kind |
-|---|---|---|---|---|---|
-| 34256 | Inversiones generales 2 | 3 333.52 | USD | UUID | investment |
-| 34876 | Inversiones generales 3 | 12 345.89 | USD | UUID | investment |
-| 31502 | Billetera Pesos | 150 000 | CLP | portfolio-caja-moneda-clp | **cash** |
-| 33168/33169/34255 | (empty flexifolios) | 0 (field absent) | CLP/USD | UUID | investment |
-| 31503 | Billetera Dólar | 0 (field absent) | USD | portfolio-caja-moneda | **cash** |
+| goal id           | title                   | currentCapital   | cur     | portfolio uuid            | kind       |
+| ----------------- | ----------------------- | ---------------- | ------- | ------------------------- | ---------- |
+| 34256             | Inversiones generales 2 | 3 333.52         | USD     | UUID                      | investment |
+| 34876             | Inversiones generales 3 | 12 345.89        | USD     | UUID                      | investment |
+| 31502             | Billetera Pesos         | 150 000          | CLP     | portfolio-caja-moneda-clp | **cash**   |
+| 33168/33169/34255 | (empty flexifolios)     | 0 (field absent) | CLP/USD | UUID                      | investment |
+| 31503             | Billetera Dólar         | 0 (field absent) | USD     | portfolio-caja-moneda     | **cash**   |
 
 **Absent `currentCapital` ⇒ 0**, not unknown (protobuf omits default doubles).
 
 ### Cash vs investment discriminators
+
 - Cash goals: `portfolio.uuid` starts with `portfolio-caja-moneda`; `investmentStrategy.title` like
   "Caja Pesos"; titles "Billetera Pesos"/"Billetera Dólar". Investment goals: UUID portfolios,
   strategy "Flexifolios"/"Flexifolios US".
@@ -264,6 +272,7 @@ current market values.
 ## Endpoint surface (relevant subset of 27 services / 303 methods)
 
 Read-only, per-user, no-arg unless noted:
+
 - `portal_goal.PortalGoalGrpcService`: **`ListMe`** (all goals), `GetMe` (predicate),
   **`GetCurrentFundings`** (positions), `GetPortfolioComposition`, `GetPortfolioByGoalId`,
   `GetFundingsSummaryByGoalIds`, `GetPatrimonyByFinancialEntity` (per-broker totals),
@@ -278,6 +287,33 @@ Read-only, per-user, no-arg unless noted:
   so likely unnecessary.
 - Mutating methods exist (`CreateGoal`, `RequestDeposit`, `Rescue`, `ArchiveGoal`, …) — **out of
   scope**; the adapter is read-only.
+
+## Bootstrap & operations (implemented adapter)
+
+The adapter (`src/adapters/betterplan*.ts`) is balance-only, refresh-token auth with rotation.
+
+**One-time bootstrap:**
+
+1. Log in to `portal.betterplan.cl` in a browser; from the `POST id.betterplan.cl/connect/token`
+   response (a normal refresh during the session), copy the `refresh_token`.
+2. Put it in `.env` as `BETTERPLAN_REFRESH_TOKEN` (the `refresh_token_env` your
+   `[connections.betterplan]` references).
+3. `bun run src/main.ts betterplan-goals` — lists every goal (`id | cur | balance | flags | title`).
+4. Add one `[[accounts]]` per goal you want, `match = { sub = "<goalId>" }`, `currency` matching the
+   goal, and a Lunch Money `manual_account` id you created for it. Skip empties.
+5. `bun run src/main.ts sync --dry-run`, then a real `sync`.
+
+**Steady state:** the env seed is used only until the state db has a token row. Each run reuses the
+cached 30-day access token and only refreshes near expiry, rotating + persisting the new refresh
+token atomically before any data call (single-flighted by a lockfile in the state dir).
+
+**Re-bootstrap** (only if a run fails with `auth_error`/`invalid_grant` — the chain died): capture a
+fresh refresh token and overwrite `BETTERPLAN_REFRESH_TOKEN`. The adapter detects the changed seed
+(via a stored fingerprint) and adopts it. Never replays a dead seed automatically.
+
+**Secrets:** `state.sqlite` now holds the refresh + access tokens (`connection_secrets` table). Treat
+the state db as secret-bearing; the drift-persist path writes only response bytes, never the `Bearer`
+header.
 
 ## Proposed adapter shape
 

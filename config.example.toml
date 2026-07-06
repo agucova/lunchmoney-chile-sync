@@ -30,6 +30,14 @@ email_env = "RACIONAL_EMAIL"
 password_env = "RACIONAL_PASS"
 device_id_env = "RACIONAL_DEVICE_ID"
 
+# BetterPlan.cl wealth management (OAuth, rotating refresh token). One login surfaces every
+# goal (investment portfolios + cash wallets). refresh_token_env seeds the FIRST run only —
+# thereafter the rotating token lives in the state db (see docs/betterplan-api.md, Bootstrap).
+# Run `bun run src/main.ts betterplan-goals` to list goal ids for the match.sub values below.
+[connections.betterplan]
+type = "betterplan"
+refresh_token_env = "BETTERPLAN_REFRESH_TOKEN"
+
 # `sources` is ordered: first is primary, the rest are fallbacks.
 [[accounts]]
 id = "santander-checking"
@@ -85,3 +93,25 @@ currency = "USD"
 lm_account_id = 100006
 sources = ["racional"]
 match = { sub = "cash" }
+
+# One [[accounts]] per BetterPlan goal you want in Lunch Money. match.sub is the goal id
+# (from `betterplan-goals`); currency must match the goal's own currency (USD or CLP). Skip
+# goals you don't care about (e.g. empty flexifolios) — the adapter fetches all of them for
+# reconciliation but only pushes the ones you map here.
+[[accounts]]
+id = "betterplan-inversiones-3"
+connection = "betterplan"
+kind = "investment"
+currency = "USD"
+lm_account_id = 100007
+sources = ["betterplan"]
+match = { sub = "34876" }
+
+[[accounts]]
+id = "betterplan-billetera-pesos"
+connection = "betterplan"
+kind = "investment"
+currency = "CLP"
+lm_account_id = 100008
+sources = ["betterplan"]
+match = { sub = "31502" }

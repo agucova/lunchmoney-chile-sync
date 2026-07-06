@@ -1,0 +1,58 @@
+// Partial schema for BetterPlan's gRPC-web API — ONLY the messages/fields the balance-only
+// adapter reads. Field numbers are the wire contract, reverse-engineered and verified live
+// (see docs/betterplan-api.md). Message/package names are ours; only the field numbers must
+// match the server. Protobuf ignores unknown fields, so upstream ADDING fields is transparent;
+// a field RENUMBER/RETYPE is caught downstream by the GetPatrimony reconciliation, not here.
+//
+// Regenerate the TS decoders with scripts/gen-betterplan-proto.sh after editing this file.
+
+syntax = "proto3";
+
+package betterplan;
+
+// server: common_message.CurrencyModel
+message CurrencyModel {
+  int32 id = 1;             // 1=CLP, 2=USD, 3=UF, 4=EUR
+  string name = 4;          // "Pesos" | "Dólares"
+  string currency_code = 9; // ISO 4217: "CLP" | "USD" — the field we key money on
+}
+
+// server: common_message.FinancialEntityModel
+message FinancialEntityModel {
+  int32 id = 1;
+  string short_title = 10; // "Betterplan" | "BetterplanUS"
+  string uuid = 12;        // "vector" | "bp-us" — reconciliation key vs patrimony entities
+}
+
+// server: common_message.GoalModel (one holding: an investment portfolio or a cash wallet)
+message GoalModel {
+  double current_capital = 4;                 // balance in the goal's currency; 0 and absent are
+                                              // wire-indistinguishable → reconciliation is the guard
+  string title = 14;                          // goal name
+  int32 id = 18;                              // goal id (the config match.sub key)
+  FinancialEntityModel financial_entity = 28; // broker
+  CurrencyModel currency = 31;                // goal currency
+  bool archived = 33;
+  bool hidden = 51;
+}
+
+// server: common_message.ListGoalResponse — portal_goal.PortalGoalGrpcService/ListMe response
+message ListGoalResponse {
+  repeated GoalModel values = 1;
+}
+
+// One entry of GetPatrimonyByFinancialEntityResponse.entities: a per-broker total in the
+// broker's native currency (no FX). Used only for the reconciliation backstop.
+message PatrimonyEntity {
+  string financial_entity_uuid = 1; // "vector" | "bp-us"
+  string financial_entity_name = 2;
+  double balance = 3;               // total for this broker, native currency
+  CurrencyModel currency = 4;
+}
+
+// server: portal_goal.GetPatrimonyByFinancialEntityResponse
+message GetPatrimonyByFinancialEntityResponse {
+  double total_balance = 1; // grand total in total_currency (CLP), FX-converted — not used for reconcile
+  CurrencyModel total_currency = 2;
+  repeated PatrimonyEntity entities = 3;
+}

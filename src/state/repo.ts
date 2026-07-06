@@ -8,7 +8,7 @@ import type { StoredIdentity } from "../core/identity.ts";
 import type { TxnStatus } from "../core/model.ts";
 import { isCurrencyCode, Money } from "../core/money.ts";
 import type { Db } from "./db.ts";
-import { accountState, opsJournal, runs, txnIdentities } from "./schema.ts";
+import { accountState, connectionSecrets, opsJournal, runs, txnIdentities } from "./schema.ts";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -300,6 +300,58 @@ export function recordPushedBalance(db: Db, accountId: string, balance: Money): 
         lastPushedBalanceMinor: balance.minor,
         lastPushedBalanceCurrency: balance.currency,
         lastPushedBalanceAt: nowIso(),
+      },
+    })
+    .run();
+}
+
+// ---------- connection secrets (rotating OAuth tokens) ----------
+
+export interface ConnectionSecret {
+  readonly refreshToken: string;
+  readonly accessToken: string | null;
+  readonly accessTokenExpiresAt: string | null;
+  readonly seedFingerprint: string | null;
+}
+
+export function getConnectionSecret(db: Db, connectionId: string): ConnectionSecret | null {
+  const row = db
+    .select({
+      refreshToken: connectionSecrets.refreshToken,
+      accessToken: connectionSecrets.accessToken,
+      accessTokenExpiresAt: connectionSecrets.accessTokenExpiresAt,
+      seedFingerprint: connectionSecrets.seedFingerprint,
+    })
+    .from(connectionSecrets)
+    .where(eq(connectionSecrets.connectionId, connectionId))
+    .get();
+  return row ?? null;
+}
+
+/**
+ * Upsert a connection's rotating tokens. Single-row write, atomic on its own; callers that need
+ * read-then-rotate-then-write as a unit must serialize with an external lock (the identity
+ * provider revokes the token family on a reuse race — see src/adapters/betterplan-auth.ts).
+ */
+export function setConnectionSecret(db: Db, connectionId: string, secret: ConnectionSecret): void {
+  const values = {
+    connectionId,
+    refreshToken: secret.refreshToken,
+    accessToken: secret.accessToken,
+    accessTokenExpiresAt: secret.accessTokenExpiresAt,
+    seedFingerprint: secret.seedFingerprint,
+    updatedAt: nowIso(),
+  };
+  db.insert(connectionSecrets)
+    .values(values)
+    .onConflictDoUpdate({
+      target: connectionSecrets.connectionId,
+      set: {
+        refreshToken: values.refreshToken,
+        accessToken: values.accessToken,
+        accessTokenExpiresAt: values.accessTokenExpiresAt,
+        seedFingerprint: values.seedFingerprint,
+        updatedAt: values.updatedAt,
       },
     })
     .run();

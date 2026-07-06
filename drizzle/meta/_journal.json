@@ -15,6 +15,13 @@
       "when": 1783346366300,
       "tag": "0001_amusing_gamora",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783352265699,
+      "tag": "0002_betterplan_connection_secrets",
+      "breakpoints": true
     }
   ]
 }

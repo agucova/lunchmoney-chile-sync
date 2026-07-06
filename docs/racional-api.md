@@ -123,11 +123,11 @@ holding, all monetary fields in **USD**:
 
 ```jsonc
 {
-  "buyingPower": 2500.00, // <-- cash balance the adapter pushes (USD)
+  "buyingPower": 2500.0, // <-- cash balance the adapter pushes (USD)
   "breakdown": {
-    "cashAvailableForTrade": 2500.00,
+    "cashAvailableForTrade": 2500.0,
     "cashAvailableForWithdrawal": 65.46,
-    "amountUSD": 2500.00,
+    "amountUSD": 2500.0,
     "cashFromSellsInTransit": 0,
     "usedDriveWealthValue": true,
     "isPro": true,

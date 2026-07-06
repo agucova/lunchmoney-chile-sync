@@ -99,7 +99,37 @@ describe("config schema (fail closed)", () => {
       sources: ["obc"],
       match: { sub: "stocks" },
     });
-    expect(() => parseConfig(bad)).toThrow(/only valid on racional/);
+    expect(() => parseConfig(bad)).toThrow(/match\.sub is not valid on obc/);
+  });
+
+  test("a betterplan account with a numeric goal-id sub parses", () => {
+    const cfg = clone();
+    cfg.connections.bp = { type: "betterplan", refresh_token_env: "BP_RT" };
+    cfg.accounts.push({
+      id: "bp-goal",
+      connection: "bp",
+      kind: "investment",
+      currency: "USD",
+      lm_account_id: 99,
+      sources: ["betterplan"],
+      match: { sub: "34876" },
+    });
+    expect(() => parseConfig(cfg)).not.toThrow();
+  });
+
+  test("a non-numeric betterplan sub is rejected at boot", () => {
+    const cfg = clone();
+    cfg.connections.bp = { type: "betterplan", refresh_token_env: "BP_RT" };
+    cfg.accounts.push({
+      id: "bp-goal",
+      connection: "bp",
+      kind: "investment",
+      currency: "USD",
+      lm_account_id: 99,
+      sources: ["betterplan"],
+      match: { sub: "not-a-number" },
+    });
+    expect(() => parseConfig(cfg)).toThrow(/numeric goal id/);
   });
 
   test("two accounts resolving to the same sub-account on one connection are rejected", () => {

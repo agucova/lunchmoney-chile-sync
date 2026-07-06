@@ -31,7 +31,6 @@ import {
   identitiesInWindow,
   insertIdentity,
   journalOp,
-  lastPushedBalance,
   markOpApplied,
   openUnbilledIdentities,
   recordPushedBalance,
@@ -47,6 +46,7 @@ export interface EngineDeps {
   readonly config: Config;
   readonly client: LunchMoneyClient;
   readonly fetchConnection: (
+    connectionId: string,
     connection: ConnectionConfig,
     hooks: { onProgress?: (step: string) => void; onTwoFactorWait?: () => void },
   ) => Promise<Map<string, FetchResult>>;
@@ -384,7 +384,7 @@ export async function sync(deps: EngineDeps, options: SyncOptions): Promise<Conn
 
     let results: Map<string, FetchResult>;
     try {
-      results = await deps.fetchConnection(connection, {
+      results = await deps.fetchConnection(connectionId, connection, {
         onProgress: (step) => log(`[${connectionId}] ${step}`),
         onTwoFactorWait: () => {
           log(`[${connectionId}] waiting for 2FA approval — check the bank app`);

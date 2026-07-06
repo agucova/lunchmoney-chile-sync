@@ -6,7 +6,7 @@ import type { Money } from "./money.ts";
 
 export type AccountKind = "checking" | "savings" | "credit_card" | "investment";
 
-export type SourceId = "obc" | "racional"; // | "khipu" | "floid" | "fintoc" as adapters land
+export type SourceId = "obc" | "racional" | "betterplan"; // | "khipu" | "floid" as adapters land
 
 /**
  * Lifecycle status of a transaction as observed at the source.

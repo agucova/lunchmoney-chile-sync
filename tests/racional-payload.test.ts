@@ -38,7 +38,7 @@ describe("racional payload (golden)", () => {
     expect(stocks?.minor).toBe(338408n);
     expect(stocks?.currency).toBe("USD");
     expect(cash?.minor).toBe(250000n);
-    expect(total?.minor).toBe(640899n);
+    expect(total?.minor).toBe(588408n); // 3384.08 stocks + 2500.00 cash
     expect(total?.minor).toBe((stocks?.minor ?? 0n) + (cash?.minor ?? 0n));
   });
 
