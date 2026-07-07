@@ -225,6 +225,24 @@ describe("fetchSantanderData", () => {
     );
   });
 
+  test("billedStatements > 1 backfills multiple CLP statements (each fetched + merged)", async () => {
+    const { impl, calls } = makeFetch();
+    const results = await fetchSantanderData(
+      CREDENTIALS,
+      {},
+      { fetchImpl: impl, today: TODAY, billedStatements: 2 },
+    );
+    // Fixture cardStatements has two CLP statements (025, 024) → both fetched.
+    const billedCalls = calls.filter((c) => c.url.includes("estadoCuentaNacional"));
+    expect(billedCalls).toHaveLength(2);
+    expect(
+      billedCalls.map((c) => (c.body["INPUT"] as Record<string, unknown>)["NumExtracto"]),
+    ).toEqual(["025", "024"]);
+    // 3 unbilled + 3 billed × 2 statements = 9 CLP card transactions.
+    const cardClp = results.get("credit_card:CLP");
+    expect(cardClp?.facets.transactions).toHaveLength(9);
+  });
+
   test("a failing billed statement degrades to unbilled-only (no regression, card still syncs)", async () => {
     const { impl } = makeFetch(fixtures.inventory, "error"); // estadoCuentaNacional → HTTP 503
     const results = await fetchSantanderData(CREDENTIALS, {}, { fetchImpl: impl, today: TODAY });

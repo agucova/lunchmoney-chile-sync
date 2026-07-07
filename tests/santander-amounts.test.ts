@@ -83,8 +83,13 @@ describe("parseBilledMonto (statement MontoTxs)", () => {
     expect(parseBilledMonto("1.430.960", "CLP").minor).toBe(1430960n);
   });
 
-  test("garbage or a signed value is drift, not coerced", () => {
-    for (const bad of ["", "-500", "12a", "1,50"]) {
+  test("a trailing '-' (refund marker) yields the magnitude — sign is the caller's", () => {
+    expect(parseBilledMonto("000014293-", "CLP").minor).toBe(14293n);
+    expect(parseBilledMonto("1.430.960-", "CLP").minor).toBe(1430960n);
+  });
+
+  test("garbage or a mid-string sign is drift, not coerced", () => {
+    for (const bad of ["", "-500", "12a", "1,50", "12-34"]) {
       expect(() => parseBilledMonto(bad, "CLP")).toThrow(SchemaDriftError);
     }
   });

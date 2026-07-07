@@ -76,12 +76,13 @@ function mergeToExponent(intPart: string, fracPart: string, exponent: number): s
 const BILLED_MONTO_RE = /^\d+$/;
 
 /**
- * Parse a billed-statement `MontoTxs` (estadoCuentaNacional): a zero-padded integer in the
- * currency's MINOR units, optionally with dot thousands-separators. For CLP (exponent 0) that
- * is whole pesos; the sign comes from the row type, not the field (unsigned here).
+ * Parse a billed-statement `MontoTxs` (estadoCuentaNacional) MAGNITUDE: a zero-padded integer
+ * in the currency's MINOR units, optionally with dot thousands-separators and a trailing "-".
+ * For CLP (exponent 0) that is whole pesos. This returns the unsigned magnitude — the sign is
+ * the row's, decided by the caller (a trailing "-" marks a refund/credit; see parseBilledStatement).
  */
 export function parseBilledMonto(raw: string, currency: CurrencyCode): Money {
-  const cleaned = raw.trim().replace(/\./g, "");
+  const cleaned = raw.trim().replace(/-$/, "").replace(/\./g, "");
   if (!BILLED_MONTO_RE.test(cleaned)) {
     throw new SchemaDriftError(`unparseable billed amount: ${JSON.stringify(raw)}`);
   }

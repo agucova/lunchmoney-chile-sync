@@ -229,6 +229,15 @@ describe("parseBilledStatement (estadoCuentaNacional)", () => {
     expect(txns[0]?.meta.installments).toBeUndefined();
   });
 
+  test("a trailing-dash MontoTxs is a refund (credit → positive at the bank)", () => {
+    const cfg = clone(fixtures.billedStatement);
+    const m = cfg.DATA.AS_TIB_WM02_CONEstCtaNacional_Response.OUTPUT.Matriz[0];
+    if (!m) throw new Error("fixture shape");
+    m.MontoTxs = "000014293-"; // a refunded PAYU *UBER TRIP charge
+    const txns = parseBilledStatement(cfg, "CLP");
+    expect(txns[0]?.amount.minor).toBe(14293n); // positive → reduces what's owed
+  });
+
   test("a fractional MontoTxs (comma/decimal) is SchemaDrift for a whole-peso statement", () => {
     const bad = clone(fixtures.billedStatement);
     const m = bad.DATA.AS_TIB_WM02_CONEstCtaNacional_Response.OUTPUT.Matriz[0];

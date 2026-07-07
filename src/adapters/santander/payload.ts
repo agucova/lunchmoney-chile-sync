@@ -430,11 +430,12 @@ const BilledStatementSchema = z
 const MONTO_CANCELADO_RE = /monto\s+cancelado/i;
 
 /**
- * Parse a billed statement into billed CanonicalTxns. `MontoTxs` is unsigned; the sign is the
- * row type — "MONTO CANCELADO" is a payment (credit, positive at the bank), everything else a
- * purchase (debit, negative), mirroring the open-banking-chile normalizer so identities minted
- * from the unbilled feed transition rather than duplicate. Installments come from
- * NumeroCuotas/TotalCuotas.
+ * Parse a billed statement into billed CanonicalTxns. `MontoTxs` carries the magnitude; a row is
+ * a CREDIT (positive at the bank) when either its amount has a trailing "-" (a refund/reversal —
+ * verified: charges − trailing-dash rows == statement TotalCompras) or its name is "MONTO
+ * CANCELADO" (a payment); otherwise it's a purchase (debit, negative). Descriptions mirror the
+ * open-banking-chile normalizer so identities minted from the unbilled feed transition rather
+ * than duplicate. Installments come from NumeroCuotas/TotalCuotas.
  */
 export function parseBilledStatement(payload: unknown, currency: CurrencyCode): CanonicalTxn[] {
   const parsed = BilledStatementSchema.safeParse(payload);
@@ -457,7 +458,9 @@ export function parseBilledStatement(payload: unknown, currency: CurrencyCode): 
     const rawDescription = movement.NombreComercio.trim();
     if (SALDO_INICIAL_RE.test(rawDescription)) continue;
     const magnitude = parseBilledMonto(movement.MontoTxs, currency);
-    const amount = MONTO_CANCELADO_RE.test(rawDescription) ? magnitude : magnitude.negate();
+    const isCredit =
+      movement.MontoTxs.trim().endsWith("-") || MONTO_CANCELADO_RE.test(rawDescription);
+    const amount = isCredit ? magnitude : magnitude.negate();
     const installments = billedInstallments(movement.NumeroCuotas, movement.TotalCuotas);
     txns.push({
       date: parseBankDate(movement.FechaTxs, "iso"),

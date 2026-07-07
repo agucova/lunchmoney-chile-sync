@@ -24,12 +24,13 @@ import {
   type IsoDate,
   todayInSantiago,
 } from "../../core/dates.ts";
-import { AuthError, SchemaDriftError } from "../../core/errors.ts";
+import { AuthError, SchemaDriftError, SourceUnavailableError } from "../../core/errors.ts";
 import type { CanonicalTxn, FetchResult, TxnStatus } from "../../core/model.ts";
 import { subAccountKey } from "../../core/model.ts";
 import { persistRawPayload } from "../raw-payload.ts";
 import { SantanderClient, type SantanderCredentials } from "./client.ts";
 import {
+  type CardStatement,
   parseBilledStatement,
   parseCardMovements,
   parseCardStatements,
@@ -44,14 +45,25 @@ export interface SantanderHooks {
 }
 
 export interface SantanderFetchOptions {
-  /** How far back checking movements are requested. */
+  /**
+   * How far back checking movements are requested. The bank caps this, so the fetch tries the
+   * requested window and, if the endpoint rejects it, falls back to a known-safe 60 days.
+   */
   windowDays?: number;
+  /**
+   * How many recent billed statements to fetch per card currency (default 1 = current period).
+   * Raise for a first-time backfill (cuentasDisponibles exposes ~12 months). Each statement
+   * reconciles independently and is best-effort — one bad statement doesn't drop the others.
+   */
+  billedStatements?: number;
   /** Injectable for tests. */
   fetchImpl?: typeof fetch;
   today?: IsoDate;
 }
 
 const DEFAULT_WINDOW_DAYS = 60;
+/** Known-safe checking window (validated live); the fallback when a larger request is rejected. */
+const SAFE_WINDOW_DAYS = 60;
 
 /** The two card currency legs Santander exposes (same contract, per-currency statements). */
 const CARD_CURRENCIES = ["CLP", "USD"] as const;
@@ -85,7 +97,8 @@ export async function fetchSantanderData(
 ): Promise<Map<string, FetchResult>> {
   const client = new SantanderClient(credentials, options.fetchImpl ?? fetch);
   const today = options.today ?? todayInSantiago();
-  const opening = addDays(today, -(options.windowDays ?? DEFAULT_WINDOW_DAYS));
+  const windowDays = options.windowDays ?? DEFAULT_WINDOW_DAYS;
+  const billedStatements = Math.max(1, options.billedStatements ?? 1);
   const fetchedAt = new Date().toISOString();
   const sourceMeta = { source: "santander" as const, fetchedAt };
 
@@ -118,18 +131,7 @@ export async function fetchSantanderData(
     switch (product.group) {
       case "CCC": {
         hooks.onProgress?.(`movimientos ${product.glosa} (${product.currency})`);
-        const payload = await client.fetchCheckingTransactions({
-          office: product.office,
-          contract: product.contract,
-          currency: product.currency,
-          opening,
-          closing: today,
-        });
-        const txns = checkPlausible(
-          await parseOrPersist(`santander-checking-${product.currency}`, payload, (p) =>
-            parseCheckingTransactions(p, product.currency),
-          ),
-        );
+        const { opening, txns } = await fetchChecking(client, product, today, windowDays, hooks);
         put(subAccountKey({ kind: "checking", sub: product.currency }), {
           coverage: { posted: { from: opening, to: today } },
           facets: {
@@ -159,11 +161,12 @@ export async function fetchSantanderData(
           ),
         );
         // Billed statement: CLP via the structured estadoCuentaNacional; USD via the
-        // estadoDeCuenta PDF (the only USD source). Both best-effort (see helpers).
+        // estadoDeCuenta PDF (the only USD source). Both best-effort (see helpers), fetching up
+        // to `billedStatements` recent statements for a first-time backfill.
         const billed =
           product.currency === "CLP"
-            ? await fetchLatestBilledClp(client, product, today, hooks)
-            : await fetchLatestBilledUsd(client, product, today, hooks);
+            ? await fetchBilledClp(client, product, today, billedStatements, hooks)
+            : await fetchBilledUsd(client, product, today, billedStatements, hooks);
         const coverage: Partial<Record<TxnStatus, { from: IsoDate; to: IsoDate }>> = {};
         if (billed.length > 0) {
           const dates = billed.map((t) => t.date);
@@ -199,112 +202,175 @@ export async function fetchSantanderData(
 }
 
 /**
- * Fetch the latest CLP billed statement for a card, as billed CanonicalTxns. Best-effort: the
- * billed feed is supplementary, so a schema/HTTP failure here logs and returns [] rather than
- * discarding the card's (working) unbilled data — EXCEPT an AuthError, which means the token is
- * bad for every call and must propagate so the connection re-harvests. Schema drift still
- * persists the raw payload for diagnosis (fail-closed on the billed portion only).
+ * Fetch checking movements, trying the requested window and, if the endpoint rejects it (the
+ * bank caps how far back it serves), falling back to a known-safe 60 days. Returns the opening
+ * date actually used and the (plausibility-checked) transactions.
  */
-async function fetchLatestBilledClp(
+async function fetchChecking(
   client: SantanderClient,
   product: SantanderProduct,
   today: IsoDate,
+  windowDays: number,
   hooks: SantanderHooks,
-): Promise<CanonicalTxn[]> {
-  try {
-    const latest = await latestStatement(client, product, "CLP");
-    if (!latest) return [];
-    hooks.onProgress?.(`estado de cuenta ${product.glosa} (${latest.fecha})`);
-    const billed = await parseOrPersist(
-      "santander-billed",
-      await client.fetchBilledStatement({
+): Promise<{ opening: IsoDate; txns: CanonicalTxn[] }> {
+  const candidates =
+    windowDays > SAFE_WINDOW_DAYS ? [windowDays, SAFE_WINDOW_DAYS] : [Math.max(1, windowDays)];
+  let lastErr: unknown;
+  for (let i = 0; i < candidates.length; i++) {
+    const days = candidates[i] as number;
+    const opening = addDays(today, -days);
+    try {
+      const payload = await client.fetchCheckingTransactions({
         office: product.office,
         contract: product.contract,
-        numExtracto: latest.numExtracto,
-      }),
-      (p) => parseBilledStatement(p, "CLP"),
-    );
-    // A billed row's date is the ORIGINAL purchase date, so an installment (e.g. cuota 8/12)
-    // legitimately reaches ~2 years back; the wide window still catches gross format flips.
-    assertPlausibleDates(
-      billed.map((t) => t.date),
-      today,
-      { maxAgeDays: 800 },
-    );
-    return billed;
-  } catch (err) {
-    if (err instanceof AuthError) throw err;
-    const detail = err instanceof Error ? err.message : String(err);
-    hooks.onProgress?.(
-      `estado de cuenta no disponible (${detail.slice(0, 80)}) — sólo por facturar`,
-    );
-    return [];
+        currency: product.currency,
+        opening,
+        closing: today,
+      });
+      const txns = await parseOrPersist(`santander-checking-${product.currency}`, payload, (p) =>
+        parseCheckingTransactions(p, product.currency),
+      );
+      assertPlausibleDates(
+        txns.map((t) => t.date),
+        today,
+        { maxAgeDays: days + 30 },
+      );
+      if (days !== windowDays) {
+        hooks.onProgress?.(`ventana ${windowDays}d no aceptada — usando ${days}d`);
+      }
+      return { opening, txns };
+    } catch (err) {
+      lastErr = err;
+      // Only a transport/HTTP rejection is retried with a smaller window; drift is a data bug.
+      if (err instanceof SourceUnavailableError && i < candidates.length - 1) continue;
+      throw err;
+    }
   }
+  throw lastErr;
 }
 
 /**
- * USD billed via the estadoDeCuenta PDF (the only USD source): decode the PDF, extract text
- * (pdftotext), then parse + reconcile against the statement's header totals. Best-effort like
- * the CLP path — a non-reconciling statement or a missing pdftotext degrades to USD-unbilled-
- * only; schema drift persists the raw response; AuthError propagates.
+ * CLP billed statements (structured estadoCuentaNacional), up to `count` most recent. Each
+ * statement reconciles/parses independently and is best-effort per statement, so one bad or
+ * missing statement doesn't drop the rest or the card's unbilled data. AuthError propagates
+ * (the token is bad for everything); schema drift persists the raw payload.
  */
-async function fetchLatestBilledUsd(
+async function fetchBilledClp(
   client: SantanderClient,
   product: SantanderProduct,
   today: IsoDate,
+  count: number,
   hooks: SantanderHooks,
 ): Promise<CanonicalTxn[]> {
-  try {
-    const latest = await latestStatement(client, product, "USD");
-    if (!latest) return [];
-    hooks.onProgress?.(`estado de cuenta internacional ${product.glosa} (${latest.fecha})`);
-    const response = await client.fetchUsdStatement({
-      office: product.office,
-      contract: product.contract,
-      fecha: latest.fecha,
-    });
-    let billed: CanonicalTxn[];
+  const statements = await listStatements(client, product, "CLP", count, hooks);
+  const all: CanonicalTxn[] = [];
+  for (const statement of statements) {
     try {
-      const pdf = extractStatementPdf(response); // SchemaDrift on a bad wrapper
-      const text = await extractPdfText(pdf); // plain Error if pdftotext is unavailable
-      billed = parseUsdStatementText(text); // SchemaDrift if it doesn't reconcile
+      hooks.onProgress?.(`estado de cuenta ${product.glosa} (${statement.fecha})`);
+      const billed = await parseOrPersist(
+        "santander-billed",
+        await client.fetchBilledStatement({
+          office: product.office,
+          contract: product.contract,
+          numExtracto: statement.numExtracto,
+        }),
+        (p) => parseBilledStatement(p, "CLP"),
+      );
+      // A billed row's date is the ORIGINAL purchase date, so an installment (e.g. cuota 8/12)
+      // legitimately reaches ~2 years back; the wide window still catches gross format flips.
+      assertPlausibleDates(
+        billed.map((t) => t.date),
+        today,
+        { maxAgeDays: 800 },
+      );
+      all.push(...billed);
     } catch (err) {
-      if (err instanceof SchemaDriftError) {
-        const path = await persistRawPayload("santander-usd-statement", response);
-        throw new SchemaDriftError(`${err.message} (raw payload: ${path})`, path, err);
-      }
-      throw err;
+      if (err instanceof AuthError) throw err;
+      hooks.onProgress?.(
+        `estado de cuenta ${statement.fecha} no disponible (${errText(err)}) — omitido`,
+      );
     }
-    assertPlausibleDates(
-      billed.map((t) => t.date),
-      today,
-      { maxAgeDays: 400 },
+  }
+  return all;
+}
+
+/**
+ * USD billed statements via the estadoDeCuenta PDF (the only USD source), up to `count` most
+ * recent: decode the PDF, extract text (pdftotext), parse + reconcile against the header
+ * totals. Best-effort per statement like the CLP path.
+ */
+async function fetchBilledUsd(
+  client: SantanderClient,
+  product: SantanderProduct,
+  today: IsoDate,
+  count: number,
+  hooks: SantanderHooks,
+): Promise<CanonicalTxn[]> {
+  const statements = await listStatements(client, product, "USD", count, hooks);
+  const all: CanonicalTxn[] = [];
+  for (const statement of statements) {
+    try {
+      hooks.onProgress?.(`estado de cuenta internacional ${product.glosa} (${statement.fecha})`);
+      const response = await client.fetchUsdStatement({
+        office: product.office,
+        contract: product.contract,
+        fecha: statement.fecha,
+      });
+      let billed: CanonicalTxn[];
+      try {
+        const pdf = extractStatementPdf(response); // SchemaDrift on a bad wrapper
+        const text = await extractPdfText(pdf); // plain Error if pdftotext is unavailable
+        billed = parseUsdStatementText(text); // SchemaDrift if it doesn't reconcile
+      } catch (err) {
+        if (err instanceof SchemaDriftError) {
+          const path = await persistRawPayload("santander-usd-statement", response);
+          throw new SchemaDriftError(`${err.message} (raw payload: ${path})`, path, err);
+        }
+        throw err;
+      }
+      assertPlausibleDates(
+        billed.map((t) => t.date),
+        today,
+        { maxAgeDays: 400 },
+      );
+      all.push(...billed);
+    } catch (err) {
+      if (err instanceof AuthError) throw err;
+      hooks.onProgress?.(
+        `estado de cuenta internacional ${statement.fecha} no disponible (${errText(err)}) — omitido`,
+      );
+    }
+  }
+  return all;
+}
+
+/** Up to `count` most recent statements of a currency; [] (logged) if the list fetch fails. */
+async function listStatements(
+  client: SantanderClient,
+  product: SantanderProduct,
+  currency: "CLP" | "USD",
+  count: number,
+  hooks: SantanderHooks,
+): Promise<CardStatement[]> {
+  try {
+    const statements = await parseOrPersist(
+      "santander-card-statements",
+      await client.fetchCardStatements({ office: product.office, contract: product.contract }),
+      parseCardStatements,
     );
-    return billed;
+    return statements
+      .filter((s) => s.currency === currency)
+      .sort((a, b) => compareIsoDates(b.fecha, a.fecha))
+      .slice(0, count);
   } catch (err) {
     if (err instanceof AuthError) throw err;
-    const detail = err instanceof Error ? err.message : String(err);
-    hooks.onProgress?.(
-      `estado de cuenta internacional no disponible (${detail.slice(0, 80)}) — sólo por facturar`,
-    );
+    hooks.onProgress?.(`estados de cuenta ${currency} no disponibles (${errText(err)})`);
     return [];
   }
 }
 
-/** The most recent statement of a given currency for a card contract. */
-async function latestStatement(
-  client: SantanderClient,
-  product: SantanderProduct,
-  currency: "CLP" | "USD",
-) {
-  const statements = await parseOrPersist(
-    "santander-card-statements",
-    await client.fetchCardStatements({ office: product.office, contract: product.contract }),
-    parseCardStatements,
-  );
-  return statements
-    .filter((s) => s.currency === currency)
-    .sort((a, b) => compareIsoDates(b.fecha, a.fecha))[0];
+function errText(err: unknown): string {
+  return (err instanceof Error ? err.message : String(err)).slice(0, 80);
 }
 
 export type { SantanderCredentials, SantanderProduct };

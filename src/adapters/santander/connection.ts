@@ -47,9 +47,16 @@ export async function fetchSantanderConnection(
     ...(hooks.log ? { log: hooks.log } : {}),
   };
 
+  // Optional backfill knobs (env): SANTANDER_WINDOW_DAYS widens the checking window,
+  // SANTANDER_BILLED_STATEMENTS fetches more than the current billed statement per card.
+  const fetchOptions = {
+    ...envInt("SANTANDER_WINDOW_DAYS", "windowDays"),
+    ...envInt("SANTANDER_BILLED_STATEMENTS", "billedStatements"),
+  };
+
   const run = async (force: boolean): Promise<Map<string, FetchResult>> => {
     const accessToken = await resolveAccessToken(store, deps, { force });
-    return fetchSantanderData({ accessToken, rutCliente }, { ...progress });
+    return fetchSantanderData({ accessToken, rutCliente }, { ...progress }, fetchOptions);
   };
 
   try {
@@ -61,4 +68,12 @@ export async function fetchSantanderConnection(
     }
     throw err;
   }
+}
+
+/** Read a positive-integer env var into a `{ [key]: n }` fragment, or `{}` if unset/invalid. */
+function envInt(name: string, key: string): Record<string, number> {
+  const raw = process.env[name];
+  if (!raw) return {};
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? { [key]: n } : {};
 }
