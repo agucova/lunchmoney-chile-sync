@@ -23,12 +23,12 @@
 // OBC era must keep matching within their buckets after the cutover.
 
 import { z } from "zod";
-import { parseBankDate } from "../../core/dates.ts";
+import { type IsoDate, parseBankDate } from "../../core/dates.ts";
 import { SchemaDriftError } from "../../core/errors.ts";
 import type { CanonicalTxn } from "../../core/model.ts";
 import { type CurrencyCode, isCurrencyCode, type Money } from "../../core/money.ts";
 import { normalizeDescription } from "../../core/normalize.ts";
-import { parseCentavos, parseChileanDisplayAmount } from "./amounts.ts";
+import { parseBilledMonto, parseCentavos, parseChileanDisplayAmount } from "./amounts.ts";
 
 function driftFromZod(label: string, error: z.ZodError): SchemaDriftError {
   return new SchemaDriftError(
@@ -288,6 +288,196 @@ const CardResponseSchema = z
 
 /** Balance carry-over pseudo-row, not a transaction (same rule as open-banking-chile). */
 const SALDO_INICIAL_RE = /saldo\s+inicial/i;
+
+// ---------------------------------------------------------------------------
+// Card statement list (POST /perdsk/tarjetasDeCredito/cuentasDisponibles)
+// ---------------------------------------------------------------------------
+
+/** ISO-4217 numeric codes the card statements use. */
+const STATEMENT_CURRENCY: Record<string, CurrencyCode> = { "152": "CLP", "840": "USD" };
+
+const StatementEntrySchema = z
+  .object({
+    CODENT: z.string(),
+    CENTALT: z.string(),
+    CUENTA: z.string(),
+    NUMEXT: z.string().regex(/^\d+$/),
+    FECHAEXT: z.string(),
+    MONEDA: z.string(),
+    PRODUCTO: z.string(),
+    SUBPRODUSTO: z.string(),
+    TipoEECC: z.string(),
+  })
+  .strict();
+
+const StatementListSchema = z
+  .object({
+    METADATA: MetadataSchema,
+    DATA: z.record(
+      z.string().regex(/^AS_TIB_WM\d+_CONCuentasDisponibles$/),
+      z
+        .object({
+          OUTPUT: z
+            .object({
+              INFO: z
+                .object({ CODERR: z.string(), DESERR: z.string(), MSGUSUARIO: z.string() })
+                .strict(),
+              MATRIZ: z.array(StatementEntrySchema),
+            })
+            .strict(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+/** One available billed statement for a card, in a specific currency. */
+export interface CardStatement {
+  /** Statement number, passed as NumExtracto to estadoCuentaNacional. */
+  readonly numExtracto: string;
+  /** Statement close date (ISO). */
+  readonly fecha: IsoDate;
+  readonly currency: CurrencyCode;
+}
+
+/**
+ * Parse the available-statements list. Only "N" (nacional) statements are returned — the type
+ * the estadoCuentaNacional endpoint serves. Unknown currency codes are drift. Entries are
+ * newest-first as the bank returns them.
+ */
+export function parseCardStatements(payload: unknown): CardStatement[] {
+  const parsed = StatementListSchema.safeParse(payload);
+  if (!parsed.success) throw driftFromZod("card-statements", parsed.error);
+  const { METADATA, DATA } = parsed.data;
+  if (METADATA.STATUS !== "0") {
+    throw new SchemaDriftError(
+      `santander card-statements returned STATUS ${METADATA.STATUS}: ${METADATA.DESCRIPCION}`,
+    );
+  }
+  const wrapper = Object.values(DATA)[0];
+  if (!wrapper) throw new SchemaDriftError("santander card-statements: empty DATA");
+  if (wrapper.OUTPUT.INFO.CODERR !== "00") {
+    throw new SchemaDriftError(
+      `santander card-statements CODERR ${wrapper.OUTPUT.INFO.CODERR}: ${wrapper.OUTPUT.INFO.DESERR}`,
+    );
+  }
+  return wrapper.OUTPUT.MATRIZ.filter((entry) => entry.TipoEECC === "N").map((entry) => {
+    const currency = STATEMENT_CURRENCY[entry.MONEDA];
+    if (!currency) {
+      throw new SchemaDriftError(
+        `santander card-statements: unknown MONEDA ${JSON.stringify(entry.MONEDA)}`,
+      );
+    }
+    return { numExtracto: entry.NUMEXT, fecha: parseBankDate(entry.FECHAEXT, "iso"), currency };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Billed statement (POST /perdsk/tarjetasDeCredito/estadoCuentaNacional)
+// ---------------------------------------------------------------------------
+
+const BilledMovementSchema = z
+  .object({
+    Pan: z.string(),
+    SegmentoTxs: z.string(),
+    CodComercio: z.string(),
+    RutComercio: z.string(),
+    RubroComercio: z.string(),
+    NombreComercio: z.string(),
+    TipoTxs: z.string(),
+    CodTxs: z.string(),
+    FechaTxs: z.string(),
+    MontoTxs: z.string(),
+    NumeroCuotas: z.string(),
+    TotalCuotas: z.string(),
+    TasaCompraCuotas: z.string(),
+    TipoCuota: z.string(),
+    MontoCuota: z.string(),
+    Microfilm: z.string(),
+    Glosa1: z.string(),
+    Glosa2: z.string(),
+    Ciudad: z.string(),
+    GlosaRubroCom: z.string(),
+  })
+  .strict();
+
+const BilledStatementSchema = z
+  .object({
+    METADATA: MetadataSchema,
+    DATA: z
+      .object({
+        AS_TIB_WM02_CONEstCtaNacional_Response: z
+          .object({
+            INFO: z
+              .object({ CODERR: z.string(), DESERR: z.string(), MSGUSUARIO: z.string() })
+              .strict(),
+            OUTPUT: z
+              .object({
+                // Statement header (cupo, due date, totals, …); metadata we don't ingest, so
+                // drift inside it can't corrupt money data — deliberately not policed.
+                RESPUESTA: z.unknown(),
+                Matriz: z.array(BilledMovementSchema),
+              })
+              .strict(),
+          })
+          .strict(),
+      })
+      .strict(),
+  })
+  .strict();
+
+/** A card payment credit row, by the marker open-banking-chile uses. */
+const MONTO_CANCELADO_RE = /monto\s+cancelado/i;
+
+/**
+ * Parse a billed statement into billed CanonicalTxns. `MontoTxs` is unsigned; the sign is the
+ * row type — "MONTO CANCELADO" is a payment (credit, positive at the bank), everything else a
+ * purchase (debit, negative), mirroring the open-banking-chile normalizer so identities minted
+ * from the unbilled feed transition rather than duplicate. Installments come from
+ * NumeroCuotas/TotalCuotas.
+ */
+export function parseBilledStatement(payload: unknown, currency: CurrencyCode): CanonicalTxn[] {
+  const parsed = BilledStatementSchema.safeParse(payload);
+  if (!parsed.success) throw driftFromZod("billed-statement", parsed.error);
+  const { METADATA, DATA } = parsed.data;
+  if (METADATA.STATUS !== "0") {
+    throw new SchemaDriftError(
+      `santander billed-statement returned STATUS ${METADATA.STATUS}: ${METADATA.DESCRIPCION}`,
+    );
+  }
+  const response = DATA.AS_TIB_WM02_CONEstCtaNacional_Response;
+  if (response.INFO.CODERR !== "00") {
+    throw new SchemaDriftError(
+      `santander billed-statement CODERR ${response.INFO.CODERR}: ${response.INFO.DESERR}`,
+    );
+  }
+
+  const txns: CanonicalTxn[] = [];
+  for (const movement of response.OUTPUT.Matriz) {
+    const rawDescription = movement.NombreComercio.trim();
+    if (SALDO_INICIAL_RE.test(rawDescription)) continue;
+    const magnitude = parseBilledMonto(movement.MontoTxs, currency);
+    const amount = MONTO_CANCELADO_RE.test(rawDescription) ? magnitude : magnitude.negate();
+    const installments = billedInstallments(movement.NumeroCuotas, movement.TotalCuotas);
+    txns.push({
+      date: parseBankDate(movement.FechaTxs, "iso"),
+      amount,
+      rawDescription,
+      normDescription: normalizeDescription(rawDescription),
+      status: "billed" as const,
+      meta: installments ? { installments } : {},
+    });
+  }
+  return txns;
+}
+
+/** "08"/"12" → "08/12"; a zero total means a single-payment purchase (no installments). */
+function billedInstallments(numeroCuotas: string, totalCuotas: string): string | undefined {
+  const total = Number.parseInt(totalCuotas, 10);
+  if (!Number.isFinite(total) || total <= 0) return undefined;
+  const current = Number.parseInt(numeroCuotas, 10) || 0;
+  return `${String(current).padStart(2, "0")}/${String(total).padStart(2, "0")}`;
+}
 
 /**
  * Parse a card últimos-movimientos response into unbilled CanonicalTxns for one

@@ -22,6 +22,10 @@ const CHECKING_TXNS_URL =
   "https://openbanking.santander.cl/account_balances_transactions_and_withholdings_retail/v1/current-accounts/transactions";
 const CARD_MOVEMENTS_URL =
   "https://api-dsk.santander.cl/perdsk/tarjetasDeCredito/consultaUltimosMovimientos";
+const CARD_STATEMENTS_URL =
+  "https://api-dsk.santander.cl/perdsk/tarjetasDeCredito/cuentasDisponibles";
+const BILLED_STATEMENT_URL =
+  "https://api-dsk.santander.cl/perdsk/tarjetasDeCredito/estadoCuentaNacional";
 
 /** Static app key embedded in the bank's frontend bundle (not a secret). */
 const SANTANDER_CLIENT_ID = "O2XRSU4kVspEGbLDDGfFC5BOTrGKh5Ts";
@@ -144,6 +148,59 @@ export class SantanderClient {
         Moneda: args.currency,
       },
     });
+  }
+
+  /** Available billed statements for a card contract (per currency, newest first). */
+  fetchCardStatements(args: { office: string; contract: string }): Promise<unknown> {
+    return this.post(CARD_STATEMENTS_URL, "card-statements", {
+      cabecera: this.cardCabecera(),
+      INPUT: {
+        "USUARIO-ALT": "GHOBP",
+        "CANAL-ID": "003",
+        CODENT: ENTIDAD_SANTANDER_CL,
+        CENTALT: args.office,
+        CUENTA: args.contract,
+        PAN: "",
+      },
+    });
+  }
+
+  /** Billed line items for one statement of a card contract (CLP national statement). */
+  fetchBilledStatement(args: {
+    office: string;
+    contract: string;
+    numExtracto: string;
+  }): Promise<unknown> {
+    return this.post(BILLED_STATEMENT_URL, "billed-statement", {
+      cabecera: this.cardCabecera(),
+      INPUT: {
+        "USUARIO-ALT": "GHOBP",
+        "TERMINAL-ALT": "",
+        "CANAL-ID": "003",
+        FILLER: "",
+        CodEnt: ENTIDAD_SANTANDER_CL,
+        CentAlt: args.office,
+        Cuenta: args.contract,
+        Pan: "",
+        NumExtracto: args.numExtracto,
+        NumMov: "",
+        FilasRecuperar: "",
+        "ID-RECALL": "",
+      },
+    });
+  }
+
+  /** The `cabecera` block shared by the card statement/billed endpoints. */
+  private cardCabecera(): Record<string, unknown> {
+    const rut = this.credentials.rutCliente;
+    return {
+      HOST: { "USUARIO-ALT": "GHOBP", "TERMINAL-ALT": "", "CANAL-ID": "003" },
+      CanalFisico: "",
+      CanalLogico: "",
+      RutCliente: rut,
+      RutUsuario: rut,
+      InfoDispositivo: "InfoDispositivo",
+    };
   }
 
   private async post(

@@ -3,7 +3,11 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import { SchemaDriftError } from "../src/core/errors.ts";
-import { parseCentavos, parseChileanDisplayAmount } from "../src/adapters/santander/amounts.ts";
+import {
+  parseBilledMonto,
+  parseCentavos,
+  parseChileanDisplayAmount,
+} from "../src/adapters/santander/amounts.ts";
 
 describe("parseChileanDisplayAmount (card Importe)", () => {
   test("CLP: dot is a thousands separator, no decimals", () => {
@@ -65,5 +69,23 @@ describe("parseCentavos (checking movementAmount / balances)", () => {
         expect(parseCentavos(raw, "USD").minor).toBe(cents);
       }),
     );
+  });
+});
+
+describe("parseBilledMonto (statement MontoTxs)", () => {
+  test("CLP: zero-padded integer is whole pesos (minor units), unsigned", () => {
+    expect(parseBilledMonto("0000007016", "CLP").minor).toBe(7016n);
+    expect(parseBilledMonto("0010000000", "CLP").minor).toBe(10000000n);
+    expect(parseBilledMonto("0000000000", "CLP").minor).toBe(0n);
+  });
+
+  test("dot thousands-separators are stripped", () => {
+    expect(parseBilledMonto("1.430.960", "CLP").minor).toBe(1430960n);
+  });
+
+  test("garbage or a signed value is drift, not coerced", () => {
+    for (const bad of ["", "-500", "12a", "1,50"]) {
+      expect(() => parseBilledMonto(bad, "CLP")).toThrow(SchemaDriftError);
+    }
   });
 });

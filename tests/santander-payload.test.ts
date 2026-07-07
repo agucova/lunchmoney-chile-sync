@@ -2,7 +2,9 @@
 // format-faithful fixtures. Exactness assertions are on BigInt minor units.
 import { describe, expect, test } from "bun:test";
 import {
+  parseBilledStatement,
   parseCardMovements,
+  parseCardStatements,
   parseCheckingTransactions,
   parseInventory,
 } from "../src/adapters/santander/payload.ts";
@@ -184,5 +186,90 @@ describe("parseCardMovements", () => {
     if (!movement) throw new Error("fixture shape");
     movement["Cuotas"] = "01/03";
     expect(() => parseCardMovements(bad, "CLP")).toThrow(SchemaDriftError);
+  });
+});
+
+describe("parseCardStatements (cuentasDisponibles)", () => {
+  test("maps ISO-numeric currencies and keeps newest-first order", () => {
+    const statements = parseCardStatements(fixtures.cardStatements);
+    expect(statements.map((s) => [s.currency, s.numExtracto, String(s.fecha)])).toEqual([
+      ["CLP", "025", "2026-06-23"],
+      ["USD", "025", "2026-06-23"],
+      ["CLP", "024", "2026-05-25"],
+    ]);
+  });
+
+  test("an unknown MONEDA code is SchemaDrift", () => {
+    const bad = clone(fixtures.cardStatements);
+    const entry = bad.DATA.AS_TIB_WM01_CONCuentasDisponibles.OUTPUT.MATRIZ[0];
+    if (!entry) throw new Error("fixture shape");
+    entry.MONEDA = "978"; // EUR numeric — not a card statement currency
+    expect(() => parseCardStatements(bad)).toThrow(SchemaDriftError);
+  });
+
+  test("only nacional (TipoEECC=N) statements are returned", () => {
+    const cfg = clone(fixtures.cardStatements);
+    const entry = cfg.DATA.AS_TIB_WM01_CONCuentasDisponibles.OUTPUT.MATRIZ[1];
+    if (!entry) throw new Error("fixture shape");
+    entry.TipoEECC = "I"; // an international-type row is filtered out, not parsed
+    expect(parseCardStatements(cfg)).toHaveLength(2);
+  });
+});
+
+describe("parseBilledStatement (estadoCuentaNacional)", () => {
+  test("parses purchases (negative), payments (positive), and installments", () => {
+    const txns = parseBilledStatement(fixtures.billedStatement, "CLP");
+    expect(txns.map((t) => [String(t.date), t.amount.minor, t.rawDescription, t.status])).toEqual([
+      ["2026-06-21", -7016n, "PAYU   *UBER TRIP", "billed"],
+      ["2026-06-10", 10000000n, "MONTO CANCELADO", "billed"], // payment → positive at bank
+      ["2025-11-11", -50000n, "MERPAGO*MERCADOLIBRE", "billed"], // installment, original date
+    ]);
+    // Installment tag comes from NumeroCuotas/TotalCuotas.
+    expect(txns[2]?.meta.installments).toBe("08/12");
+    expect(txns[0]?.meta.installments).toBeUndefined();
+  });
+
+  test("a fractional MontoTxs (comma/decimal) is SchemaDrift for a whole-peso statement", () => {
+    const bad = clone(fixtures.billedStatement);
+    const m = bad.DATA.AS_TIB_WM02_CONEstCtaNacional_Response.OUTPUT.Matriz[0];
+    if (!m) throw new Error("fixture shape");
+    m.MontoTxs = "70,16";
+    expect(() => parseBilledStatement(bad, "CLP")).toThrow(SchemaDriftError);
+  });
+
+  test("a non-success CODERR is SchemaDrift", () => {
+    const bad = clone(fixtures.billedStatement);
+    bad.DATA.AS_TIB_WM02_CONEstCtaNacional_Response.INFO.CODERR = "91";
+    expect(() => parseBilledStatement(bad, "CLP")).toThrow(SchemaDriftError);
+  });
+
+  test("an unexpected line-item field is SchemaDrift (strict Matriz)", () => {
+    const bad = clone(fixtures.billedStatement) as {
+      METADATA: unknown;
+      DATA: {
+        AS_TIB_WM02_CONEstCtaNacional_Response: {
+          INFO: unknown;
+          OUTPUT: { RESPUESTA: unknown; Matriz: Array<Record<string, unknown>> };
+        };
+      };
+    };
+    const m = bad.DATA.AS_TIB_WM02_CONEstCtaNacional_Response.OUTPUT.Matriz[0];
+    if (!m) throw new Error("fixture shape");
+    m["MonedaTxs"] = "CLP";
+    expect(() => parseBilledStatement(bad, "CLP")).toThrow(SchemaDriftError);
+  });
+
+  test("drift in the unpoliced RESPUESTA header does NOT fail the batch", () => {
+    const cfg = clone(fixtures.billedStatement) as {
+      METADATA: unknown;
+      DATA: {
+        AS_TIB_WM02_CONEstCtaNacional_Response: {
+          INFO: unknown;
+          OUTPUT: { RESPUESTA: Record<string, unknown>; Matriz: unknown };
+        };
+      };
+    };
+    cfg.DATA.AS_TIB_WM02_CONEstCtaNacional_Response.OUTPUT.RESPUESTA = { SomethingNew: "x" };
+    expect(parseBilledStatement(cfg, "CLP")).toHaveLength(3); // money data unaffected
   });
 });

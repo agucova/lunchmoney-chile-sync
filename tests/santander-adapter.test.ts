@@ -32,7 +32,7 @@ interface RecordedCall {
 }
 
 /** Fetch stub speaking the fixture set, recording every call for request assertions. */
-function makeFetch(inventory: unknown = fixtures.inventory) {
+function makeFetch(inventory: unknown = fixtures.inventory, billedResponse?: unknown | "error") {
   const calls: RecordedCall[] = [];
   const impl = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -53,6 +53,11 @@ function makeFetch(inventory: unknown = fixtures.inventory) {
     if (url.includes("consultaUltimosMovimientos")) {
       const entrada = body["Entrada"] as Record<string, unknown>;
       return json(entrada["Moneda"] === "USD" ? fixtures.cardUsd : fixtures.cardClp);
+    }
+    if (url.includes("cuentasDisponibles")) return json(fixtures.cardStatements);
+    if (url.includes("estadoCuentaNacional")) {
+      if (billedResponse === "error") return new Response("nope", { status: 503 });
+      return json(billedResponse ?? fixtures.billedStatement);
     }
     throw new Error(`unexpected fetch url: ${url}`);
   }) as typeof fetch;
@@ -136,13 +141,29 @@ describe("fetchSantanderData", () => {
 
     // Card legs: unbilled txns + owed balance; NO unbilled coverage until the billed
     // feeds land (suppresses false vanish flags at statement close).
+    // CLP card: 3 unbilled (últimos movimientos) + 3 billed (latest statement) = 6.
     const cardClp = results.get("credit_card:CLP");
-    expect(cardClp?.facets.transactions).toHaveLength(3);
+    expect(cardClp?.facets.transactions).toHaveLength(6);
+    const clpStatuses = new Set(cardClp?.facets.transactions?.map((t) => t.status));
+    expect(clpStatuses).toEqual(new Set(["unbilled", "billed"]));
     expect(cardClp?.facets.balance?.amount.minor).toBe(2919265n);
-    expect(cardClp?.coverage).toEqual({});
+    // Billed coverage is declared (from the statement window); unbilled is not.
+    expect(cardClp?.coverage.billed).toBeDefined();
+    expect(cardClp?.coverage.unbilled).toBeUndefined();
+
+    // USD card: unbilled only (billed statement endpoint not yet integrated for USD).
     const cardUsd = results.get("credit_card:USD");
     expect(cardUsd?.facets.transactions).toHaveLength(2);
+    expect(cardUsd?.facets.transactions?.every((t) => t.status === "unbilled")).toBe(true);
+    expect(cardUsd?.coverage).toEqual({});
     expect(cardUsd?.facets.balance?.amount.minor).toBe(435665n);
+
+    // The billed statement is fetched for the CLP leg only.
+    const billedCalls = calls.filter((c) => c.url.includes("estadoCuentaNacional"));
+    expect(billedCalls).toHaveLength(1);
+    const billedCall = billedCalls[0];
+    if (!billedCall) throw new Error("billed call missing");
+    expect((billedCall.body["INPUT"] as Record<string, unknown>)["NumExtracto"]).toBe("025");
 
     // The credit line is reported, not silently dropped.
     expect(progress.some((step) => step.includes("línea de crédito"))).toBe(true);
@@ -196,5 +217,21 @@ describe("fetchSantanderData", () => {
     expect(fetchSantanderData(CREDENTIALS, {}, { fetchImpl: impl, today: TODAY })).rejects.toThrow(
       SchemaDriftError,
     );
+  });
+
+  test("a failing billed statement degrades to unbilled-only (no regression, card still syncs)", async () => {
+    const { impl } = makeFetch(fixtures.inventory, "error"); // estadoCuentaNacional → HTTP 503
+    const results = await fetchSantanderData(CREDENTIALS, {}, { fetchImpl: impl, today: TODAY });
+    const cardClp = results.get("credit_card:CLP");
+    expect(cardClp?.facets.transactions).toHaveLength(3); // unbilled only
+    expect(cardClp?.facets.transactions?.every((t) => t.status === "unbilled")).toBe(true);
+    expect(cardClp?.coverage).toEqual({});
+    // The rest of the connection is unaffected.
+    expect([...results.keys()].sort()).toEqual([
+      "checking:CLP",
+      "checking:USD",
+      "credit_card:CLP",
+      "credit_card:USD",
+    ]);
   });
 });

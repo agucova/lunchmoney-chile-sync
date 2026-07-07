@@ -253,5 +253,143 @@
         }
       ]
     }
+  },
+  "cardStatements": {
+    "METADATA": { "STATUS": "0", "DESCRIPCION": "OK" },
+    "DATA": {
+      "AS_TIB_WM01_CONCuentasDisponibles": {
+        "OUTPUT": {
+          "INFO": {
+            "CODERR": "00",
+            "DESERR": "Operación Exitosa",
+            "MSGUSUARIO": "Operación Exitosa"
+          },
+          "MATRIZ": [
+            {
+              "CODENT": "0035",
+              "CENTALT": "0123",
+              "CUENTA": "000098765432",
+              "NUMEXT": "025",
+              "FECHAEXT": "2026-06-23",
+              "MONEDA": "152",
+              "PRODUCTO": "80",
+              "SUBPRODUSTO": "0004",
+              "TipoEECC": "N"
+            },
+            {
+              "CODENT": "0035",
+              "CENTALT": "0123",
+              "CUENTA": "000098765432",
+              "NUMEXT": "025",
+              "FECHAEXT": "2026-06-23",
+              "MONEDA": "840",
+              "PRODUCTO": "80",
+              "SUBPRODUSTO": "0004",
+              "TipoEECC": "N"
+            },
+            {
+              "CODENT": "0035",
+              "CENTALT": "0123",
+              "CUENTA": "000098765432",
+              "NUMEXT": "024",
+              "FECHAEXT": "2026-05-25",
+              "MONEDA": "152",
+              "PRODUCTO": "80",
+              "SUBPRODUSTO": "0004",
+              "TipoEECC": "N"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "billedStatement": {
+    "METADATA": { "STATUS": "0", "DESCRIPCION": "OK" },
+    "DATA": {
+      "AS_TIB_WM02_CONEstCtaNacional_Response": {
+        "INFO": {
+          "CODERR": "00",
+          "DESERR": "Operación Exitosa",
+          "MSGUSUARIO": "Operación Exitosa"
+        },
+        "OUTPUT": {
+          "RESPUESTA": {
+            "CupoPesos": "000000700000",
+            "DeudaTotalFact": "00003976506",
+            "PagoMinimo": "000000150000",
+            "FechaFactActual": "2026-06-23",
+            "FechaVenc": "2026-07-08"
+          },
+          "Matriz": [
+            {
+              "Pan": "999999#000004321",
+              "SegmentoTxs": "03",
+              "CodComercio": "00000000",
+              "RutComercio": "           ",
+              "RubroComercio": "000",
+              "NombreComercio": "PAYU   *UBER TRIP",
+              "TipoTxs": "000",
+              "CodTxs": "000",
+              "FechaTxs": "2026-06-21",
+              "MontoTxs": "0000007016",
+              "NumeroCuotas": "00",
+              "TotalCuotas": "00",
+              "TasaCompraCuotas": "0000000",
+              "TipoCuota": "00",
+              "MontoCuota": "0000000000",
+              "Microfilm": "00000000000000000000000",
+              "Glosa1": "                              ",
+              "Glosa2": "                              ",
+              "Ciudad": "SANTIAGO",
+              "GlosaRubroCom": "TIT"
+            },
+            {
+              "Pan": "999999#000004321",
+              "SegmentoTxs": "01",
+              "CodComercio": "00000000",
+              "RutComercio": "           ",
+              "RubroComercio": "000",
+              "NombreComercio": "MONTO CANCELADO",
+              "TipoTxs": "000",
+              "CodTxs": "067",
+              "FechaTxs": "2026-06-10",
+              "MontoTxs": "0010000000",
+              "NumeroCuotas": "00",
+              "TotalCuotas": "00",
+              "TasaCompraCuotas": "0000000",
+              "TipoCuota": "00",
+              "MontoCuota": "0000000000",
+              "Microfilm": "00000000000000000000000",
+              "Glosa1": "                              ",
+              "Glosa2": "                              ",
+              "Ciudad": "                              ",
+              "GlosaRubroCom": "   "
+            },
+            {
+              "Pan": "999999#000004321",
+              "SegmentoTxs": "03",
+              "CodComercio": "00000000",
+              "RutComercio": "           ",
+              "RubroComercio": "000",
+              "NombreComercio": "MERPAGO*MERCADOLIBRE",
+              "TipoTxs": "000",
+              "CodTxs": "205",
+              "FechaTxs": "2025-11-11",
+              "MontoTxs": "0000050000",
+              "NumeroCuotas": "08",
+              "TotalCuotas": "12",
+              "TasaCompraCuotas": "0250000",
+              "TipoCuota": "00",
+              "MontoCuota": "0000050000",
+              "Microfilm": "00000000000000000000000",
+              "Glosa1": "                              ",
+              "Glosa2": "                              ",
+              "Ciudad": "SANTIAGO",
+              "GlosaRubroCom": "TIT"
+            }
+          ]
+        }
+      }
+    }
   }
 }

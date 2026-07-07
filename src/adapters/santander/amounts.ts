@@ -73,6 +73,25 @@ function mergeToExponent(intPart: string, fracPart: string, exponent: number): s
   return exponent === 0 ? intPart : `${intPart}.${keep}`;
 }
 
+const BILLED_MONTO_RE = /^\d+$/;
+
+/**
+ * Parse a billed-statement `MontoTxs` (estadoCuentaNacional): a zero-padded integer in the
+ * currency's MINOR units, optionally with dot thousands-separators. For CLP (exponent 0) that
+ * is whole pesos; the sign comes from the row type, not the field (unsigned here).
+ */
+export function parseBilledMonto(raw: string, currency: CurrencyCode): Money {
+  const cleaned = raw.trim().replace(/\./g, "");
+  if (!BILLED_MONTO_RE.test(cleaned)) {
+    throw new SchemaDriftError(`unparseable billed amount: ${JSON.stringify(raw)}`);
+  }
+  const value = Number(cleaned);
+  if (!Number.isSafeInteger(value)) {
+    throw new SchemaDriftError(`billed amount out of safe-integer range: ${JSON.stringify(raw)}`);
+  }
+  return Money.fromMinorNumber(value, currency);
+}
+
 /** Money construction re-thrown as drift: the offending input is bank data, not our bug. */
 function decimalOrDrift(canonical: string, currency: CurrencyCode, raw: string): Money {
   try {

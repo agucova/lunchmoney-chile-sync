@@ -7,20 +7,31 @@
 // currency. The credit line (LCR) is reported via onProgress and skipped: it has no
 // mapped LM account and no movement feed wired yet.
 //
-// Card results deliberately declare NO unbilled coverage yet: the billed-statement
-// endpoints (estadoCuentaNacional + its international sibling) are not integrated, so a
-// purchase leaving the últimos-movimientos feed at statement close is billing, not a
-// reversal — with coverage declared, every one of them would be a false vanish flag.
-// Reversal detection for these cards resumes when the billed feeds land.
+// Card sub-accounts merge two feeds: the unbilled "últimos movimientos" (all currencies) and,
+// for the CLP leg, the latest billed statement (cuentasDisponibles → estadoCuentaNacional),
+// which adds installment tags, historical backfill, and unbilled→billed transitions. The
+// billed fetch is best-effort: its failure degrades to unbilled-only rather than dropping the
+// card. USD billed is a separate endpoint (estadoDeCuenta) not yet integrated. Cards declare
+// only `billed` coverage — never `unbilled` — because a single-statement billed fetch can't
+// reliably confirm a vanished unbilled txn was billed, so declaring it would risk false vanish
+// flags; transitions fire regardless of coverage.
 
-import { addDays, assertPlausibleDates, todayInSantiago, type IsoDate } from "../../core/dates.ts";
-import { SchemaDriftError } from "../../core/errors.ts";
-import type { CanonicalTxn, FetchResult } from "../../core/model.ts";
+import {
+  addDays,
+  assertPlausibleDates,
+  compareIsoDates,
+  type IsoDate,
+  todayInSantiago,
+} from "../../core/dates.ts";
+import { AuthError, SchemaDriftError } from "../../core/errors.ts";
+import type { CanonicalTxn, FetchResult, TxnStatus } from "../../core/model.ts";
 import { subAccountKey } from "../../core/model.ts";
 import { persistRawPayload } from "../raw-payload.ts";
 import { SantanderClient, type SantanderCredentials } from "./client.ts";
 import {
+  parseBilledStatement,
   parseCardMovements,
+  parseCardStatements,
   parseCheckingTransactions,
   parseInventory,
   type SantanderProduct,
@@ -140,16 +151,29 @@ export async function fetchSantanderData(
           contract: product.contract,
           currency: product.currency,
         });
-        const txns = checkPlausible(
+        const unbilled = checkPlausible(
           await parseOrPersist(`santander-card-${product.currency}`, payload, (p) =>
             parseCardMovements(p, product.currency),
           ),
         );
+        // Billed statement: CLP only for now (estadoCuentaNacional is the national/CLP
+        // statement; the USD statement is a separate endpoint not yet integrated).
+        const billed =
+          product.currency === "CLP" ? await fetchLatestBilled(client, product, today, hooks) : [];
+        const coverage: Partial<Record<TxnStatus, { from: IsoDate; to: IsoDate }>> = {};
+        if (billed.length > 0) {
+          const dates = billed.map((t) => t.date);
+          coverage.billed = { from: dates.reduce((a, b) => (a < b ? a : b)), to: today };
+        }
         put(subAccountKey({ kind: "credit_card", sub: product.currency }), {
-          // No coverage declared: see the header note on vanish flags vs billed feeds.
-          coverage: {},
+          // Only `billed` coverage is declared (documents the statement window). `unbilled`
+          // is deliberately NOT declared: with a single-statement billed fetch, an unbilled
+          // txn leaving the feed at statement close isn't reliably observable as billed here,
+          // so declaring unbilled coverage would risk false vanish flags. Transitions still
+          // fire (they don't depend on coverage).
+          coverage,
           facets: {
-            transactions: txns,
+            transactions: [...unbilled, ...billed],
             // MONTOUTILIZADO = amount owed on this leg (used + available = cupo,
             // verified against live data); LM credit assets store owed as positive.
             balance: { amount: product.used, asOf: today },
@@ -168,6 +192,57 @@ export async function fetchSantanderData(
     throw new SchemaDriftError("santander fetch produced no sub-accounts");
   }
   return results;
+}
+
+/**
+ * Fetch the latest CLP billed statement for a card, as billed CanonicalTxns. Best-effort: the
+ * billed feed is supplementary, so a schema/HTTP failure here logs and returns [] rather than
+ * discarding the card's (working) unbilled data — EXCEPT an AuthError, which means the token is
+ * bad for every call and must propagate so the connection re-harvests. Schema drift still
+ * persists the raw payload for diagnosis (fail-closed on the billed portion only).
+ */
+async function fetchLatestBilled(
+  client: SantanderClient,
+  product: SantanderProduct,
+  today: IsoDate,
+  hooks: SantanderHooks,
+): Promise<CanonicalTxn[]> {
+  try {
+    const statements = await parseOrPersist(
+      "santander-card-statements",
+      await client.fetchCardStatements({ office: product.office, contract: product.contract }),
+      parseCardStatements,
+    );
+    const latest = statements
+      .filter((s) => s.currency === "CLP")
+      .sort((a, b) => compareIsoDates(b.fecha, a.fecha))[0];
+    if (!latest) return [];
+    hooks.onProgress?.(`estado de cuenta ${product.glosa} (${latest.fecha})`);
+    const billed = await parseOrPersist(
+      "santander-billed",
+      await client.fetchBilledStatement({
+        office: product.office,
+        contract: product.contract,
+        numExtracto: latest.numExtracto,
+      }),
+      (p) => parseBilledStatement(p, "CLP"),
+    );
+    // A billed row's date is the ORIGINAL purchase date, so an installment (e.g. cuota 8/12)
+    // legitimately reaches ~2 years back; the wide window still catches gross format flips.
+    assertPlausibleDates(
+      billed.map((t) => t.date),
+      today,
+      { maxAgeDays: 800 },
+    );
+    return billed;
+  } catch (err) {
+    if (err instanceof AuthError) throw err;
+    const detail = err instanceof Error ? err.message : String(err);
+    hooks.onProgress?.(
+      `estado de cuenta no disponible (${detail.slice(0, 80)}) — sólo por facturar`,
+    );
+    return [];
+  }
 }
 
 export type { SantanderCredentials, SantanderProduct };
