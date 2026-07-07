@@ -26,6 +26,7 @@ const CARD_STATEMENTS_URL =
   "https://api-dsk.santander.cl/perdsk/tarjetasDeCredito/cuentasDisponibles";
 const BILLED_STATEMENT_URL =
   "https://api-dsk.santander.cl/perdsk/tarjetasDeCredito/estadoCuentaNacional";
+const USD_STATEMENT_URL = "https://api-dsk.santander.cl/perdsk/tarjetasDeCredito/estadoDeCuenta";
 
 /** Static app key embedded in the bank's frontend bundle (not a secret). */
 const SANTANDER_CLIENT_ID = "O2XRSU4kVspEGbLDDGfFC5BOTrGKh5Ts";
@@ -186,6 +187,34 @@ export class SantanderClient {
         NumMov: "",
         FilasRecuperar: "",
         "ID-RECALL": "",
+      },
+    });
+  }
+
+  /**
+   * The USD (international) billed statement for a card contract, as a base64 PDF wrapper.
+   * `fecha` is the statement's close date (ISO); the endpoint wants it as YYYYMMDD. The
+   * Cabecera constants are not validated (the token is the auth), verified by live replay.
+   */
+  fetchUsdStatement(args: { office: string; contract: string; fecha: IsoDate }): Promise<unknown> {
+    const rut = this.credentials.rutCliente;
+    return this.post(USD_STATEMENT_URL, "usd-statement", {
+      Cabecera: {
+        HOST: { "USUARIO-ALT": "GHOBP", "TERMINAL-ALT": "", "CANAL-ID": "003" },
+        CanalFisico: "",
+        CanalLogico: "",
+        RutCliente: rut,
+        RutUsuario: rut,
+        IpCliente: "",
+        InfoDispositivo: "InfoDispositivo",
+      },
+      Entrada: {
+        RutCliente: "",
+        CodEntidad: ENTIDAD_SANTANDER_CL,
+        CentroAlt: args.office,
+        Moneda: "USD",
+        Cuenta: args.contract,
+        Fecha: args.fecha.replace(/-/g, ""),
       },
     });
   }

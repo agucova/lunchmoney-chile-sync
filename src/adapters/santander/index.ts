@@ -7,11 +7,12 @@
 // currency. The credit line (LCR) is reported via onProgress and skipped: it has no
 // mapped LM account and no movement feed wired yet.
 //
-// Card sub-accounts merge two feeds: the unbilled "últimos movimientos" (all currencies) and,
-// for the CLP leg, the latest billed statement (cuentasDisponibles → estadoCuentaNacional),
-// which adds installment tags, historical backfill, and unbilled→billed transitions. The
-// billed fetch is best-effort: its failure degrades to unbilled-only rather than dropping the
-// card. USD billed is a separate endpoint (estadoDeCuenta) not yet integrated. Cards declare
+// Card sub-accounts merge two feeds: the unbilled "últimos movimientos" (all currencies) and
+// the latest billed statement — CLP via the structured estadoCuentaNacional, USD via the
+// estadoDeCuenta PDF (its only source; extracted with pdftotext and reconciled against the
+// statement totals). The billed feed adds installment tags, historical backfill, and
+// unbilled→billed transitions. It's best-effort: any failure (drift, non-reconciling PDF,
+// missing pdftotext) degrades to unbilled-only rather than dropping the card. Cards declare
 // only `billed` coverage — never `unbilled` — because a single-statement billed fetch can't
 // reliably confirm a vanished unbilled txn was billed, so declaring it would risk false vanish
 // flags; transitions fire regardless of coverage.
@@ -36,6 +37,7 @@ import {
   parseInventory,
   type SantanderProduct,
 } from "./payload.ts";
+import { extractPdfText, extractStatementPdf, parseUsdStatementText } from "./usd-statement.ts";
 
 export interface SantanderHooks {
   onProgress?: (step: string) => void;
@@ -156,10 +158,12 @@ export async function fetchSantanderData(
             parseCardMovements(p, product.currency),
           ),
         );
-        // Billed statement: CLP only for now (estadoCuentaNacional is the national/CLP
-        // statement; the USD statement is a separate endpoint not yet integrated).
+        // Billed statement: CLP via the structured estadoCuentaNacional; USD via the
+        // estadoDeCuenta PDF (the only USD source). Both best-effort (see helpers).
         const billed =
-          product.currency === "CLP" ? await fetchLatestBilled(client, product, today, hooks) : [];
+          product.currency === "CLP"
+            ? await fetchLatestBilledClp(client, product, today, hooks)
+            : await fetchLatestBilledUsd(client, product, today, hooks);
         const coverage: Partial<Record<TxnStatus, { from: IsoDate; to: IsoDate }>> = {};
         if (billed.length > 0) {
           const dates = billed.map((t) => t.date);
@@ -201,21 +205,14 @@ export async function fetchSantanderData(
  * bad for every call and must propagate so the connection re-harvests. Schema drift still
  * persists the raw payload for diagnosis (fail-closed on the billed portion only).
  */
-async function fetchLatestBilled(
+async function fetchLatestBilledClp(
   client: SantanderClient,
   product: SantanderProduct,
   today: IsoDate,
   hooks: SantanderHooks,
 ): Promise<CanonicalTxn[]> {
   try {
-    const statements = await parseOrPersist(
-      "santander-card-statements",
-      await client.fetchCardStatements({ office: product.office, contract: product.contract }),
-      parseCardStatements,
-    );
-    const latest = statements
-      .filter((s) => s.currency === "CLP")
-      .sort((a, b) => compareIsoDates(b.fecha, a.fecha))[0];
+    const latest = await latestStatement(client, product, "CLP");
     if (!latest) return [];
     hooks.onProgress?.(`estado de cuenta ${product.glosa} (${latest.fecha})`);
     const billed = await parseOrPersist(
@@ -243,6 +240,71 @@ async function fetchLatestBilled(
     );
     return [];
   }
+}
+
+/**
+ * USD billed via the estadoDeCuenta PDF (the only USD source): decode the PDF, extract text
+ * (pdftotext), then parse + reconcile against the statement's header totals. Best-effort like
+ * the CLP path — a non-reconciling statement or a missing pdftotext degrades to USD-unbilled-
+ * only; schema drift persists the raw response; AuthError propagates.
+ */
+async function fetchLatestBilledUsd(
+  client: SantanderClient,
+  product: SantanderProduct,
+  today: IsoDate,
+  hooks: SantanderHooks,
+): Promise<CanonicalTxn[]> {
+  try {
+    const latest = await latestStatement(client, product, "USD");
+    if (!latest) return [];
+    hooks.onProgress?.(`estado de cuenta internacional ${product.glosa} (${latest.fecha})`);
+    const response = await client.fetchUsdStatement({
+      office: product.office,
+      contract: product.contract,
+      fecha: latest.fecha,
+    });
+    let billed: CanonicalTxn[];
+    try {
+      const pdf = extractStatementPdf(response); // SchemaDrift on a bad wrapper
+      const text = await extractPdfText(pdf); // plain Error if pdftotext is unavailable
+      billed = parseUsdStatementText(text); // SchemaDrift if it doesn't reconcile
+    } catch (err) {
+      if (err instanceof SchemaDriftError) {
+        const path = await persistRawPayload("santander-usd-statement", response);
+        throw new SchemaDriftError(`${err.message} (raw payload: ${path})`, path, err);
+      }
+      throw err;
+    }
+    assertPlausibleDates(
+      billed.map((t) => t.date),
+      today,
+      { maxAgeDays: 400 },
+    );
+    return billed;
+  } catch (err) {
+    if (err instanceof AuthError) throw err;
+    const detail = err instanceof Error ? err.message : String(err);
+    hooks.onProgress?.(
+      `estado de cuenta internacional no disponible (${detail.slice(0, 80)}) — sólo por facturar`,
+    );
+    return [];
+  }
+}
+
+/** The most recent statement of a given currency for a card contract. */
+async function latestStatement(
+  client: SantanderClient,
+  product: SantanderProduct,
+  currency: "CLP" | "USD",
+) {
+  const statements = await parseOrPersist(
+    "santander-card-statements",
+    await client.fetchCardStatements({ office: product.office, contract: product.contract }),
+    parseCardStatements,
+  );
+  return statements
+    .filter((s) => s.currency === currency)
+    .sort((a, b) => compareIsoDates(b.fecha, a.fecha))[0];
 }
 
 export type { SantanderCredentials, SantanderProduct };

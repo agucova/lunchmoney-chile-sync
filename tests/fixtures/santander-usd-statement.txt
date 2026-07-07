@@ -1,0 +1,29 @@
+                                                                       1   DE 2
+                                     ESTADO DE CUENTA INTERNACIONAL DE TARJETA DE CRÉDITO
+ NOMBRE DEL TITULAR                 MARIA EJEMPLO GONZALEZ
+ Nº DE TARJETA DE CRÉDITO           XXXX XXXX XXXX 4321                           W. LIMITED VISA
+ FECHA ESTADO DE CUENTA             23/06/2026
+
+  I.   INFORMACIÓN GENERAL
+                                    CUPO TOTAL             CUPO UTILIZADO            CUPO DISPONIBLE
+CUPO TOTAL                     US$ 7.000,00            US$ 1.250,06           US$ 5.749,94
+ II.   DETALLE
+ 1.    INFORMACIÓN DEL PERÍODO
+ SALDO ANTERIOR FACTURADO                                    US$ 800,00                         PERÍODO FACTURADO DESDE                      25/05/2026
+ ABONO REALIZADO                                             US$ -20,00                         PERÍODO FACTURADO HASTA                      23/06/2026
+ TOTAL DE COMPRAS Y CARGOS                                   US$ 1.270,06                        PAGAR HASTA                                  08/07/2026
+ TRASPASO DEUDA NACIONAL                                     US$ -800,00
+ DEUDA TOTAL                                                 US$ 1.250,06
+
+ 2.PERÍODO ACTUAL
+FECHA DE         DESCRIPCIÓN OPERACIÓN O COBRO                                CIUDAD          PAÍS     MONTO MONEDA MONTO US$
+OPERACIÓN                                                                                              ORIGEN
+                1. TOTAL OPERACIONES                                                                                    1.270,06
+                MOVIMIENTOS TARJETA XXXX-4321                                                                           1.270,06
+15/05/26         UBER *TRIP                                                   HELP.UBER.      NL             10,00         10,00
+16/05/26         AMAZON PRIME*AB12CD34                                        Amzn.com/bill   US             25,50         25,50
+17/05/26         LYRO LAB                                                     PARIS           FR         12.345,00      1.234,56
+18/05/26         NOTA DE CREDITO                                             NEW YORK         US             20,00        -20,00
+09/06/26         TRASPASO DE DEUDA INTERNACIO                                                 CH              1,00       -800,00
+                                          2   DE 2
+   Infórmese sobre las entidades autorizadas para emitir Tarjetas de Pago en el país.

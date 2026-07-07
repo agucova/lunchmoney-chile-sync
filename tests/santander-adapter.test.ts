@@ -59,6 +59,10 @@ function makeFetch(inventory: unknown = fixtures.inventory, billedResponse?: unk
       if (billedResponse === "error") return new Response("nope", { status: 503 });
       return json(billedResponse ?? fixtures.billedStatement);
     }
+    // USD statement (estadoDeCuenta) → PDF path. Return 503 so the adapter degrades to
+    // USD-unbilled-only without needing pdftotext in the unit test (the PDF parse is covered
+    // by santander-usd-statement.test.ts + validated live).
+    if (url.includes("estadoDeCuenta")) return new Response("pdf unavailable", { status: 503 });
     throw new Error(`unexpected fetch url: ${url}`);
   }) as typeof fetch;
   return { impl, calls };
@@ -151,14 +155,16 @@ describe("fetchSantanderData", () => {
     expect(cardClp?.coverage.billed).toBeDefined();
     expect(cardClp?.coverage.unbilled).toBeUndefined();
 
-    // USD card: unbilled only (billed statement endpoint not yet integrated for USD).
+    // USD card: the USD billed statement (estadoDeCuenta PDF) was ATTEMPTED but returns 503
+    // in this stub, so the leg degrades to unbilled-only — no regression.
     const cardUsd = results.get("credit_card:USD");
+    expect(calls.some((c) => c.url.includes("estadoDeCuenta"))).toBe(true);
     expect(cardUsd?.facets.transactions).toHaveLength(2);
     expect(cardUsd?.facets.transactions?.every((t) => t.status === "unbilled")).toBe(true);
     expect(cardUsd?.coverage).toEqual({});
     expect(cardUsd?.facets.balance?.amount.minor).toBe(435665n);
 
-    // The billed statement is fetched for the CLP leg only.
+    // The structured billed statement (estadoCuentaNacional) is fetched for the CLP leg only.
     const billedCalls = calls.filter((c) => c.url.includes("estadoCuentaNacional"));
     expect(billedCalls).toHaveLength(1);
     const billedCall = billedCalls[0];

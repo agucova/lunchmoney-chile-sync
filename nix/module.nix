@@ -32,7 +32,8 @@ in
       type = lib.types.path;
       description = ''
         EnvironmentFile with SANTANDER_RUT/SANTANDER_PASS, BANCOCHILE_RUT/
-        BANCOCHILE_PASS, LUNCHMONEY_TOKEN (e.g. an agenix secret path).
+        BANCOCHILE_PASS, BCI_RUT/BCI_PASS, LUNCHMONEY_TOKEN (e.g. an agenix
+        secret path).
       '';
     };
 
@@ -62,7 +63,9 @@ in
 
     systemd.services.lunchmoney-chile-sync = {
       description = "Lunch Money Chile sync";
-      path = cfg.extraPackages;
+      # poppler_utils provides `pdftotext`, used to read the USD (international) credit-card
+      # statement PDF (the only source for USD billed history).
+      path = [ pkgs.poppler_utils ] ++ cfg.extraPackages;
       environment = {
         OBC_CHROME_PATH = lib.getExe cfg.chromiumPackage;
         SYNC_DRIFT_DIR = "/var/lib/lunchmoney-chile-sync/drift";
