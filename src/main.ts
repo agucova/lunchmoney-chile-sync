@@ -14,6 +14,8 @@ import { fetchBetterplanConnection, listBetterplanGoals } from "./adapters/bette
 import { makeDbTokenStore } from "./adapters/betterplan-auth.ts";
 import { fetchObcConnection } from "./adapters/obc.ts";
 import { fetchRacionalConnection } from "./adapters/racional.ts";
+import { fetchSantanderConnection } from "./adapters/santander/connection.ts";
+import { makeSantanderTokenStore } from "./adapters/santander/auth.ts";
 import type { FetchResult } from "./core/model.ts";
 import { sync } from "./engine.ts";
 import { LunchMoneyClient } from "./sink/lunchmoney.ts";
@@ -40,7 +42,7 @@ const statusCommand = command(
   }),
 );
 
-// Discovery: list a BetterPlan connection's goals so their ids can be mapped to LM accounts.
+// Discovery: list a Betterplan connection's goals so their ids can be mapped to LM accounts.
 const betterplanGoalsCommand = command(
   "betterplan-goals",
   object({
@@ -94,6 +96,15 @@ function fetchConnection(
         connection,
         makeDbTokenStore(db, connectionId, stateDir),
         hooks,
+      );
+    case "santander":
+      return fetchSantanderConnection(
+        connection,
+        makeSantanderTokenStore(db, connectionId, stateDir),
+        {
+          ...hooks,
+          log: (message) => console.log(`[${connectionId}] ${message}`),
+        },
       );
   }
 }

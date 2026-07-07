@@ -132,6 +132,43 @@ describe("config schema (fail closed)", () => {
     expect(() => parseConfig(cfg)).toThrow(/numeric goal id/);
   });
 
+  test("a santander connection with per-currency checking + card accounts parses", () => {
+    const cfg = clone();
+    cfg.connections.sant = { type: "santander", rut_env: "S_RUT", password_env: "S_PASS" };
+    for (const [suffix, kind, currency, lm] of [
+      ["checking", "checking", "CLP", 201],
+      ["checking-usd", "checking", "USD", 202],
+      ["cc", "credit_card", "CLP", 203],
+      ["cc-usd", "credit_card", "USD", 204],
+    ] as const) {
+      cfg.accounts.push({
+        id: `sant-${suffix}`,
+        connection: "sant",
+        kind,
+        currency,
+        lm_account_id: lm,
+        sources: ["santander"],
+        match: { sub: currency },
+      });
+    }
+    expect(() => parseConfig(cfg)).not.toThrow();
+  });
+
+  test("a santander match.sub that isn't a currency code is rejected at boot", () => {
+    const cfg = clone();
+    cfg.connections.sant = { type: "santander", rut_env: "S_RUT", password_env: "S_PASS" };
+    cfg.accounts.push({
+      id: "sant-bad",
+      connection: "sant",
+      kind: "checking",
+      currency: "CLP",
+      lm_account_id: 205,
+      sources: ["santander"],
+      match: { sub: "pesos" },
+    });
+    expect(() => parseConfig(cfg)).toThrow(/must be a currency code/);
+  });
+
   test("two accounts resolving to the same sub-account on one connection are rejected", () => {
     const bad = clone();
     bad.accounts.push({

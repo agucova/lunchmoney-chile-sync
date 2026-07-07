@@ -9,10 +9,16 @@ token_env = "LUNCHMONEY_TOKEN"
 db_path = "state.sqlite"
 
 # One connection per credential set. A single connection surfaces several
-# sub-accounts (e.g. Santander: checking + credit cards from one login).
+# sub-accounts (e.g. Santander: CLP + USD checking and both card currency legs from
+# one login).
+#
+# Santander uses the native JSON API (type = "santander"): a browser harvests the
+# Akamai-gated OAuth token once per run (headless, ~30s, no 2FA), then all data is pure
+# HTTP — this reaches the USD checking account and the USD card statement that the OBC
+# scraper cannot. (The OBC path — type = "obc", obc_bank = "santander" — remains available
+# as a CLP-only fallback.)
 [connections.santander]
-type = "obc"
-obc_bank = "santander"
+type = "santander"
 rut_env = "SANTANDER_RUT"
 password_env = "SANTANDER_PASS"
 
@@ -22,6 +28,17 @@ obc_bank = "bchile"
 rut_env = "BANCOCHILE_RUT"
 password_env = "BANCOCHILE_PASS"
 
+# BCI. Logins may require a "BCI Pass" in-app approval — keep your phone nearby
+# (timeout via BCI_2FA_TIMEOUT_SEC, 30-600s). Checking history reaches back ~2 years
+# via BCI's API (observed); the HTML fallback path only covers recent movements.
+# Multiple checking accounts under one login merge into a single checking
+# sub-account with "[label]" description prefixes.
+[connections.bci]
+type = "obc"
+obc_bank = "bci"
+rut_env = "BCI_RUT"
+password_env = "BCI_PASS"
+
 # Racional.cl brokerage (Firebase auth). One login, two balance sub-accounts: stocks
 # and cash. device_id_env must reference a Racional-trusted device UUID.
 [connections.racional]
@@ -30,7 +47,7 @@ email_env = "RACIONAL_EMAIL"
 password_env = "RACIONAL_PASS"
 device_id_env = "RACIONAL_DEVICE_ID"
 
-# BetterPlan.cl wealth management (OAuth, rotating refresh token). One login surfaces every
+# Betterplan.cl wealth management (OAuth, rotating refresh token). One login surfaces every
 # goal (investment portfolios + cash wallets). refresh_token_env seeds the FIRST run only —
 # thereafter the rotating token lives in the state db (see docs/betterplan-api.md, Bootstrap).
 # Run `bun run src/main.ts betterplan-goals` to list goal ids for the match.sub values below.
@@ -39,13 +56,25 @@ type = "betterplan"
 refresh_token_env = "BETTERPLAN_REFRESH_TOKEN"
 
 # `sources` is ordered: first is primary, the rest are fallbacks.
+# Santander's one connection yields per-currency sub-accounts; match.sub selects the
+# currency leg (CLP / USD) for both checking and cards.
 [[accounts]]
 id = "santander-checking"
 connection = "santander"
 kind = "checking"
 currency = "CLP"
 lm_account_id = 100001
-sources = ["obc"]
+sources = ["santander"]
+match = { sub = "CLP" }
+
+[[accounts]]
+id = "santander-checking-usd"
+connection = "santander"
+kind = "checking"
+currency = "USD"
+lm_account_id = 100011
+sources = ["santander"]
+match = { sub = "USD" }
 
 [[accounts]]
 id = "bchile-checking"
@@ -55,14 +84,45 @@ currency = "CLP"
 lm_account_id = 100002
 sources = ["obc"]
 
-# Santander's flat scraper shape exposes one unlabeled card sub-account (no
-# match.card_last4 needed); nested shapes (Banco de Chile) need match.card_last4.
+# A BCI Cuenta Vista maps to the checking sub-account key regardless of how the
+# Lunch Money asset is typed.
+[[accounts]]
+id = "bci-checking"
+connection = "bci"
+kind = "checking"
+currency = "CLP"
+lm_account_id = 100009
+sources = ["obc"]
+
+# Santander cards: one contract, two currency statements. match.sub picks the leg;
+# no match.card_last4 (the native adapter keys card sub-accounts by currency).
 [[accounts]]
 id = "santander-cc"
 connection = "santander"
 kind = "credit_card"
 currency = "CLP"
 lm_account_id = 100003
+sources = ["santander"]
+match = { sub = "CLP" }
+
+[[accounts]]
+id = "santander-cc-usd"
+connection = "santander"
+kind = "credit_card"
+currency = "USD"
+lm_account_id = 100012
+sources = ["santander"]
+match = { sub = "USD" }
+
+# CAUTION: BCI international-USD card movements arrive with no currency marker and
+# would ingest as CLP. Verify your card has no "Internacional USD" activity (run the
+# scraper once and inspect) before mapping a BCI credit card.
+[[accounts]]
+id = "bci-cc"
+connection = "bci"
+kind = "credit_card"
+currency = "CLP"
+lm_account_id = 100010
 sources = ["obc"]
 
 [[accounts]]
@@ -88,13 +148,12 @@ match = { sub = "stocks" }
 [[accounts]]
 id = "racional-cash"
 connection = "racional"
-kind = "investment"
+kind = "cash"
 currency = "USD"
 lm_account_id = 100006
 sources = ["racional"]
-match = { sub = "cash" }
 
-# One [[accounts]] per BetterPlan goal you want in Lunch Money. match.sub is the goal id
+# One [[accounts]] per Betterplan goal you want in Lunch Money. match.sub is the goal id
 # (from `betterplan-goals`); currency must match the goal's own currency (USD or CLP). Skip
 # goals you don't care about (e.g. empty flexifolios) — the adapter fetches all of them for
 # reconciliation but only pushes the ones you map here.
