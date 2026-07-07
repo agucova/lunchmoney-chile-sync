@@ -34,6 +34,8 @@ const RunnerEventSchema = z.discriminatedUnion("event", [
 export interface HarvestHooks {
   onProgress?: (step: string) => void;
   onTwoFactorWait?: () => void;
+  /** Verbose subprocess diagnostics (login state, captured-token source, screenshots). */
+  onDebug?: (line: string) => void;
   log?: (message: string) => void;
 }
 
@@ -105,6 +107,7 @@ export function makeBrowserHarvester(
             hooks.onProgress?.(event.data.step);
             break;
           case "debug":
+            hooks.onDebug?.(event.data.line);
             debugTail.push(event.data.line);
             if (debugTail.length > 20) debugTail.shift();
             break;
