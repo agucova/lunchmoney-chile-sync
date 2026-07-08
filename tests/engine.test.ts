@@ -178,11 +178,11 @@ const RACIONAL_CONFIG: Config = {
     {
       id: "racional-cash",
       connection: "racional",
-      kind: "investment",
+      kind: "cash",
       currency: "USD",
       lm_account_id: 111112,
       sources: ["racional"],
-      match: { sub: "cash" },
+      match: {},
     },
   ],
 };

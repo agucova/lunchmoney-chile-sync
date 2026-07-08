@@ -1,13 +1,20 @@
 // Fail-closed parsing of open-banking-chile payloads into FetchResults.
 //
-// Every quirk here was OBSERVED in Phase 0 (docs/phase0-findings.md) and is encoded
-// deliberately narrowly — anything outside this grammar is SchemaDrift, and the whole
-// batch is rejected rather than guessed at:
+// Every quirk here was OBSERVED in Phase 0 (docs/phase0-findings.md) — except BCI, whose
+// grammar is code-derived from the pinned scraper (commit 085faafd; no real capture yet) —
+// and is encoded deliberately narrowly: anything outside this grammar is SchemaDrift, and
+// the whole batch is rejected rather than guessed at.
 // - Santander emits the flat v2 shape: everything in accounts[0].movements, split by
 //   `source` tag; no creditCards[]. BdCh emits the nested v3 shape with creditCards[].
+// - BCI is a hybrid: flat movements like Santander, plus cupo-only creditCards[] entries
+//   whose movements are always empty; movement balances are always literal 0.
 // - Date formats differ per (bank, source): Santander account+billed are ISO,
-//   Santander unbilled is dd-mm-yyyy, BdCh is dd-mm-yyyy.
+//   Santander unbilled is dd-mm-yyyy, BdCh is dd-mm-yyyy. BCI account movements are
+//   path-dependent upstream (ISO from the intercepted API, dd-mm-yyyy from the HTML
+//   fallback), so their declaration is a set of admissible formats.
 // - BdCh movement balances arrive as strings; amounts are integer CLP everywhere.
+// - BCI international-USD card movements carry no currency marker and would ingest as
+//   CLP — undetectable here; the supervised first run must check for them.
 // - Schemas are .strict(): an upstream field addition is a drift we want to notice.
 
 import { z } from "zod";
@@ -15,7 +22,7 @@ import {
   type BankDateFormat,
   assertPlausibleDates,
   type IsoDate,
-  parseBankDate,
+  parseBankDateAny,
 } from "../core/dates.ts";
 import { SchemaDriftError } from "../core/errors.ts";
 import type { CanonicalTxn, FetchResult, SubAccountRef, TxnStatus } from "../core/model.ts";
@@ -99,17 +106,62 @@ const ScrapeResultSchema = z
 
 type Movement = z.infer<typeof MovementSchema>;
 
-/** Per-(bank, source) date format declarations — observed, not sniffed. */
-const DATE_FORMATS: Record<string, Record<Movement["source"], BankDateFormat>> = {
+/** How a bank's creditCards[] entries are to be read. */
+type CreditCardsShape = "absent" | "per-card" | "cupo-only";
+
+interface BankShape {
+  /** Admissible date format(s) per movement source — declared, never sniffed. */
+  readonly dates: Record<Movement["source"], readonly [BankDateFormat, ...BankDateFormat[]]>;
+  /**
+   * absent: any creditCards entry is drift. per-card: each entry is a sub-account keyed
+   * by label last-4. cupo-only: entries carry cupo metadata only (ignored, like bchile's
+   * cupo); an entry with movements is drift — the flat path already carries the card
+   * movements, so a populated nested path could double-emit the same transactions.
+   */
+  readonly creditCards: CreditCardsShape;
+  /**
+   * Drift tripwire: the checking sub-account must show evidence (a balance or ≥1 posted
+   * movement). BCI emits a success payload with one empty account when post-login
+   * navigation fails, which would otherwise pass as a silent no-op run.
+   */
+  readonly requireCheckingEvidence?: boolean;
+  /**
+   * Widens the movement-date plausibility window past the 400-day default for banks
+   * whose payloads legitimately reach further back (BCI's intercepted API returns
+   * roughly two years of checking history).
+   */
+  readonly maxMovementAgeDays?: number;
+}
+
+/** Per-bank payload shape declarations — observed (Phase 0) or, for bci, code-derived. */
+const BANK_SHAPES: Record<string, BankShape> = {
   santander: {
-    account: "iso",
-    credit_card_billed: "iso",
-    credit_card_unbilled: "dd-mm-yyyy",
+    dates: {
+      account: ["iso"],
+      credit_card_billed: ["iso"],
+      credit_card_unbilled: ["dd-mm-yyyy"],
+    },
+    creditCards: "absent",
   },
   bchile: {
-    account: "dd-mm-yyyy",
-    credit_card_billed: "dd-mm-yyyy",
-    credit_card_unbilled: "dd-mm-yyyy",
+    dates: {
+      account: ["dd-mm-yyyy"],
+      credit_card_billed: ["dd-mm-yyyy"],
+      credit_card_unbilled: ["dd-mm-yyyy"],
+    },
+    creditCards: "per-card",
+  },
+  bci: {
+    dates: {
+      account: ["iso", "dd-mm-yyyy"],
+      credit_card_billed: ["dd-mm-yyyy"],
+      credit_card_unbilled: ["dd-mm-yyyy"],
+    },
+    creditCards: "cupo-only",
+    requireCheckingEvidence: true,
+    // Observed 2026-07: the BFF API returned movements back to ~24 months; 800 days
+    // leaves headroom without letting decade-off flips through.
+    maxMovementAgeDays: 800,
   },
 };
 
@@ -130,13 +182,11 @@ function parseBalance(value: number | string | null | undefined): Money | null {
   return Money.fromDecimalString(value, SCRAPER_CURRENCY);
 }
 
-function toCanonical(movement: Movement, bank: string): CanonicalTxn {
-  const formats = DATE_FORMATS[bank];
-  if (!formats) throw new SchemaDriftError(`no date-format declaration for bank ${bank}`);
+function toCanonical(movement: Movement, shape: BankShape): CanonicalTxn {
   const rawDescription = movement.description.trim();
   const runningBalance = parseBalance(movement.balance);
   return {
-    date: parseBankDate(movement.date, formats[movement.source]),
+    date: parseBankDateAny(movement.date, shape.dates[movement.source]),
     amount: Money.fromMinorNumber(movement.amount, SCRAPER_CURRENCY),
     rawDescription,
     normDescription: normalizeDescription(rawDescription),
@@ -187,6 +237,8 @@ export function parseObcPayload(
         .join("; ")}`,
     );
   }
+  const shape = BANK_SHAPES[bank];
+  if (!shape) throw new SchemaDriftError(`no payload-shape declaration for bank ${bank}`);
   const data = parsed.data;
   const results = new Map<string, FetchResult>();
   const sourceMeta = { source: "obc" as const, fetchedAt };
@@ -199,11 +251,16 @@ export function parseObcPayload(
     results.set(key, result);
   };
 
+  const plausibility = shape.maxMovementAgeDays
+    ? { maxAgeDays: shape.maxMovementAgeDays }
+    : undefined;
+
   for (const account of data.accounts ?? []) {
-    const canonical = account.movements.map((m) => toCanonical(m, bank));
+    const canonical = account.movements.map((m) => toCanonical(m, shape));
     assertPlausibleDates(
       canonical.map((t) => t.date),
       today,
+      plausibility,
     );
 
     // Santander's flat shape mixes checking + CC movements in one account entry;
@@ -212,6 +269,11 @@ export function parseObcPayload(
     const cardTxns = canonical.filter((t) => t.status !== "posted");
 
     const balance = parseBalance(account.balance);
+    if (shape.requireCheckingEvidence && checkingTxns.length === 0 && !balance) {
+      throw new SchemaDriftError(
+        `${bank} checking scrape produced no evidence (no balance, no movements) — upstream navigation failure?`,
+      );
+    }
     put(
       { kind: "checking" },
       {
@@ -234,10 +296,25 @@ export function parseObcPayload(
   }
 
   for (const card of data.creditCards ?? []) {
-    const canonical = (card.movements ?? []).map((m) => toCanonical(m, bank));
+    if (shape.creditCards === "absent") {
+      throw new SchemaDriftError(
+        `${bank} payload contains creditCards[] but its shape declares none`,
+      );
+    }
+    if (shape.creditCards === "cupo-only") {
+      if ((card.movements ?? []).length > 0) {
+        throw new SchemaDriftError(
+          `${bank} cupo-only credit card ${JSON.stringify(card.label)} carries movements; ` +
+            `flat + nested paths would double-emit`,
+        );
+      }
+      continue;
+    }
+    const canonical = (card.movements ?? []).map((m) => toCanonical(m, shape));
     assertPlausibleDates(
       canonical.map((t) => t.date),
       today,
+      plausibility,
     );
     const last4 = cardLast4FromLabel(card.label);
     if (!last4) {

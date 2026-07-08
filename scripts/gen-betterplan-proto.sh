@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate BetterPlan's protobuf-es TS decoders from betterplan.proto.
+# Regenerate Betterplan's protobuf-es TS decoders from betterplan.proto.
 #
 # Dev-only: pulls buf + protoc-gen-es via bunx (no system protoc/buf needed). The generated
 # output under src/adapters/betterplan/gen/ is COMMITTED — runtime never runs codegen. Rerun

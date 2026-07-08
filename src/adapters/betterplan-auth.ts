@@ -1,4 +1,4 @@
-// BetterPlan OAuth: refresh-token grant with rotation, against IdentityServer4 at
+// Betterplan OAuth: refresh-token grant with rotation, against IdentityServer4 at
 // id.betterplan.cl (public PKCE client `portal-ts-code`, no secret). See docs/betterplan-api.md.
 //
 // Reliability rules (an architecture review drove these — a slip means a manual browser

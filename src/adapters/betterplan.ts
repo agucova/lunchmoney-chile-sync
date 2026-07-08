@@ -1,4 +1,4 @@
-// BetterPlan source adapter: OAuth (rotating refresh token) → gRPC-web ListMe + GetPatrimony →
+// Betterplan source adapter: OAuth (rotating refresh token) → gRPC-web ListMe + GetPatrimony →
 // reconcile + parse into one balance FetchResult per goal. Balance-only, no transactions.
 // Protocol + field map in docs/betterplan-api.md; auth in betterplan-auth.ts; the fail-closed
 // reconciliation in betterplan-payload.ts.
@@ -59,7 +59,7 @@ async function connect(
 }
 
 /**
- * Fetch balances for a BetterPlan connection: one balance FetchResult per goal, keyed
+ * Fetch balances for a Betterplan connection: one balance FetchResult per goal, keyed
  * "investment:<goalId>". Throws classified SyncErrors; persists raw response bytes on drift.
  */
 export async function fetchBetterplanConnection(

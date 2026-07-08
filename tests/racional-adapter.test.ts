@@ -90,13 +90,9 @@ describe("racional adapter", () => {
     });
 
     const results = await fetchRacionalConnection(CONNECTION, {}, impl);
-    expect([...results.keys()].sort()).toEqual([
-      "investment",
-      "investment:cash",
-      "investment:stocks",
-    ]);
+    expect([...results.keys()].sort()).toEqual(["cash", "investment", "investment:stocks"]);
     expect(results.get("investment:stocks")?.facets.balance?.amount.minor).toBe(338408n);
-    expect(results.get("investment:cash")?.facets.balance?.amount.minor).toBe(250000n);
+    expect(results.get("cash")?.facets.balance?.amount.minor).toBe(250000n);
 
     // Exactly one sign-in; data reads carry the Bearer token; NotifySuccessfulLogin untouched.
     expect(calls.mfa).toHaveLength(1);

@@ -1,0 +1,53 @@
+{
+  "success": true,
+  "bank": "bci",
+  "accounts": [
+    {
+      "balance": 2345678,
+      "movements": [
+        {
+          "date": "2026-07-01",
+          "description": "TRANSFERENCIA DE TERCEROS",
+          "amount": 350000,
+          "balance": 0,
+          "source": "account"
+        },
+        {
+          "date": "28-06-2026",
+          "description": "COMPRA WEB SUPERMERCADO LIDER",
+          "amount": -45990,
+          "balance": 0,
+          "source": "account"
+        },
+        {
+          "date": "03-07-2026",
+          "description": "COMPRA NACIONAL UBER *TRIP",
+          "amount": -8500,
+          "balance": 0,
+          "source": "credit_card_unbilled"
+        },
+        {
+          "date": "15-06-2026",
+          "description": "COMPRA NACIONAL FARMACIA CRUZ VERDE",
+          "amount": -12990,
+          "balance": 0,
+          "source": "credit_card_billed"
+        }
+      ]
+    }
+  ],
+  "creditCards": [
+    {
+      "label": "Tarjeta Visa Bci",
+      "national": { "used": 21490, "available": 1978510, "total": 2000000 },
+      "movements": []
+    },
+    {
+      "label": "Mastercard **** 5566",
+      "national": { "used": 0, "available": 500000, "total": 500000 },
+      "international": { "used": 0, "available": 1000, "total": 1000, "currency": "USD" },
+      "movements": []
+    }
+  ],
+  "debug": "sanitized"
+}

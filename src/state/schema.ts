@@ -104,7 +104,7 @@ export const accountState = sqliteTable("account_state", {
   lastPushedBalanceAt: text("last_pushed_balance_at"),
 });
 
-// Per-connection rotating OAuth secrets (currently BetterPlan). The refresh token rotates on
+// Per-connection rotating OAuth secrets (currently Betterplan). The refresh token rotates on
 // every use and the identity provider revokes the whole family on reuse, so the live token
 // must be persisted here (env only seeds the first run). The access token is cached to its
 // expiry so most runs make zero token calls. Secret-bearing: back up state.sqlite accordingly.

@@ -1,4 +1,4 @@
-# BetterPlan.cl API — end-to-end reference (2026-07-06)
+# Betterplan.cl API — end-to-end reference (2026-07-06)
 
 Reverse-engineered from a logged-in portal HAR **and confirmed against the live API** on
 2026-07-06 (transport, auth, and every message schema below were exercised live with the user's

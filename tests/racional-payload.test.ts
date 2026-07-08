@@ -21,17 +21,14 @@ function parse(fx: Fixture) {
 describe("racional payload (golden)", () => {
   test("emits total + stocks + cash entries", () => {
     const results = parse(clone());
-    expect([...results.keys()].sort()).toEqual([
-      "investment",
-      "investment:cash",
-      "investment:stocks",
-    ]);
+    // Cash is its own "cash" sub-account; stocks stays under investment.
+    expect([...results.keys()].sort()).toEqual(["cash", "investment", "investment:stocks"]);
   });
 
   test("stocks is Σ round(position); cash is buyingPower; total is their sum", () => {
     const results = parse(clone());
     const stocks = results.get("investment:stocks")?.facets.balance?.amount;
-    const cash = results.get("investment:cash")?.facets.balance?.amount;
+    const cash = results.get("cash")?.facets.balance?.amount;
     const total = results.get("investment")?.facets.balance?.amount;
 
     // 2100.00 + 1250.75 + 33.333333→33.33 = 3384.08

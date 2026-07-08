@@ -31,6 +31,7 @@ type RunnerEvent =
 const ENV_PREFIX: Record<string, string> = {
   santander: "SANTANDER",
   bchile: "BANCOCHILE",
+  bci: "BCI",
 };
 
 const EXIT = { ok: 0, unexpected: 1, usage: 2, scrapeFailed: 3 } as const;

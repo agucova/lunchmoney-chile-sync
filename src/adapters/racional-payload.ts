@@ -99,8 +99,8 @@ function formatIssues(error: z.ZodError, label: string): string {
 
 /**
  * Parse the two Racional payloads into per-sub-account balance FetchResults, keyed by
- * subAccountKey: "investment" (stocks + cash total), "investment:stocks", "investment:cash".
- * Every entry is balance-only with empty coverage. Throws SchemaDriftError on any drift.
+ * subAccountKey: "investment" (stocks + cash total), "investment:stocks", and "cash" (the
+ * liquid cash sweep). Every entry is balance-only with empty coverage. Throws on any drift.
  */
 export function parseRacionalPayload(
   positionsRaw: unknown,
@@ -143,6 +143,7 @@ export function parseRacionalPayload(
   const results = new Map<string, FetchResult>();
   results.set(subAccountKey({ kind: "investment" }), balanceResult(total));
   results.set(subAccountKey({ kind: "investment", sub: "stocks" }), balanceResult(stocks));
-  results.set(subAccountKey({ kind: "investment", sub: "cash" }), balanceResult(cash));
+  // Cash is a `kind: "cash"` sub-account (near-immediate liquidity), not an investment facet.
+  results.set(subAccountKey({ kind: "cash" }), balanceResult(cash));
   return results;
 }

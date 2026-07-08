@@ -216,7 +216,7 @@ async function signIn(
 
 /**
  * Fetch balances for a Racional connection: sign in, read positions + buying-power, parse
- * into per-sub-account FetchResults ("investment", "investment:stocks", "investment:cash").
+ * into per-sub-account FetchResults ("investment", "investment:stocks", "cash").
  * Throws classified SyncErrors; persists the raw payload on schema drift.
  */
 export async function fetchRacionalConnection(

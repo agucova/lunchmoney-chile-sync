@@ -1,4 +1,4 @@
-// Partial schema for BetterPlan's gRPC-web API — ONLY the messages/fields the balance-only
+// Partial schema for Betterplan's gRPC-web API — ONLY the messages/fields the balance-only
 // adapter reads. Field numbers are the wire contract, reverse-engineered and verified live
 // (see docs/betterplan-api.md). Message/package names are ours; only the field numbers must
 // match the server. Protobuf ignores unknown fields, so upstream ADDING fields is transparent;

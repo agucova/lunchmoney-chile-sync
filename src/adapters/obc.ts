@@ -39,7 +39,7 @@ export interface ObcHooks {
 }
 
 const AUTH_HINTS = /clave|contraseñ|credencial|bloquead|password|rut inv/i;
-const TWO_FACTOR_HINTS = /2fa|segundo factor|no fue aprobad|tiempo de espera.*aprobaci/i;
+const TWO_FACTOR_HINTS = /2fa|segundo factor|no fue aprobad|bci pass|tiempo de espera.*aprobaci/i;
 
 function classifyScrapeFailure(message: string): Error {
   if (TWO_FACTOR_HINTS.test(message)) return new TwoFactorTimeoutError(message);
