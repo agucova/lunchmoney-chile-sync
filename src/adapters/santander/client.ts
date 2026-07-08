@@ -16,6 +16,7 @@ import {
 } from "../../core/errors.ts";
 import type { IsoDate } from "../../core/dates.ts";
 import type { CurrencyCode } from "../../core/money.ts";
+import { dashContract } from "./cartola.ts";
 
 const INVENTORY_URL = "https://api-dsk.santander.cl/perdsk/datosCliente/cruceProductosOnline";
 const CHECKING_TXNS_URL =
@@ -27,6 +28,8 @@ const CARD_STATEMENTS_URL =
 const BILLED_STATEMENT_URL =
   "https://api-dsk.santander.cl/perdsk/tarjetasDeCredito/estadoCuentaNacional";
 const USD_STATEMENT_URL = "https://api-dsk.santander.cl/perdsk/tarjetasDeCredito/estadoDeCuenta";
+const CARTOLA_LIST_URL = "https://api-dsk.santander.cl/perdsk/datosCliente/ultCartolaHistorica";
+const CARTOLA_PDF_URL = "https://api-dsk.santander.cl/perdsk/datosCliente/buzonVirtual";
 
 /** Static app key embedded in the bank's frontend bundle (not a secret). */
 const SANTANDER_CLIENT_ID = "O2XRSU4kVspEGbLDDGfFC5BOTrGKh5Ts";
@@ -217,6 +220,57 @@ export class SantanderClient {
         Fecha: args.fecha.replace(/-/g, ""),
       },
     });
+  }
+
+  /**
+   * List the checking statement ("cartola") for one month: whether it exists (+ its close date
+   * and account number). `month`/`year` are the zero-padded MM / YYYY of the statement period.
+   */
+  fetchCartolaList(args: { contract: string; month: string; year: string }): Promise<unknown> {
+    return this.post(CARTOLA_LIST_URL, "cartola-list", {
+      cabecera: this.cartolaCabecera(),
+      INPUT: {
+        ENTIDAD: ENTIDAD_SANTANDER_CL,
+        PRODUCTO: "00",
+        CONTRATO: args.contract,
+        MESCONSULTA: args.month,
+        ANOCONSULTA: args.year,
+      },
+    });
+  }
+
+  /**
+   * Download a checking statement as a base64 PDF wrapper. `accountNumber` is the 12-digit
+   * account (dash-formatted for `contrato`); `fecha` is the statement close date (ISO), sent as
+   * both fechaInicio/fechaFin in YYYYMMDD.
+   */
+  fetchCartolaPdf(args: { accountNumber: string; fecha: IsoDate }): Promise<unknown> {
+    const yyyymmdd = args.fecha.replace(/-/g, "");
+    return this.post(CARTOLA_PDF_URL, "cartola-pdf", {
+      cabecera: this.cartolaCabecera(),
+      INPUT: {
+        formato: "PDF",
+        contrato: dashContract(args.accountNumber),
+        rutCliente: this.credentials.rutCliente,
+        fechaInicio: yyyymmdd,
+        fechaFin: yyyymmdd,
+        tipoDocumento: "CUENTAS_AR",
+      },
+    });
+  }
+
+  /** The `cabecera` block for the datosCliente cartola endpoints (distinct channel constants). */
+  private cartolaCabecera(): Record<string, unknown> {
+    const rut = this.credentials.rutCliente;
+    return {
+      HOST: { "USUARIO-ALT": "GHOBP", "TERMINAL-ALT": "", "CANAL-ID": "078" },
+      CanalFisico: "003",
+      CanalLogico: "74",
+      RutCliente: rut,
+      RutUsuario: rut,
+      InfoDispositivo: "003",
+      InfoGeneral: { NumeroServidor: "01" },
+    };
   }
 
   /** The `cabecera` block shared by the card statement/billed endpoints. */

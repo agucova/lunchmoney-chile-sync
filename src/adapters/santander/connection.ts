@@ -48,10 +48,12 @@ export async function fetchSantanderConnection(
   };
 
   // Optional backfill knobs (env): SANTANDER_WINDOW_DAYS widens the checking window,
-  // SANTANDER_BILLED_STATEMENTS fetches more than the current billed statement per card.
+  // SANTANDER_BILLED_STATEMENTS fetches more than the current billed statement per card,
+  // SANTANDER_CARTOLA_MONTHS backfills N months of checking statements (cartola PDFs).
   const fetchOptions = {
     ...envInt("SANTANDER_WINDOW_DAYS", "windowDays"),
     ...envInt("SANTANDER_BILLED_STATEMENTS", "billedStatements"),
+    ...envInt("SANTANDER_CARTOLA_MONTHS", "cartolaMonths"),
   };
 
   const run = async (force: boolean): Promise<Map<string, FetchResult>> => {

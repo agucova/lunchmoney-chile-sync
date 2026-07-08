@@ -1,0 +1,33 @@
+BANCO SANTANDER CHILE
+
+        SU EJECUTIVO DE CUENTA ES :       MARIA EJEMPLO GONZALEZ
+        SUCURSAL :         OFICINA EJEMPLO
+
+                                                                                                  CUENTA CORRIENTE ML
+        CLIENTE DE EJEMPLO PEREZ
+                                                                                                  0-000-11-11111-1                          004 11111111
+
+        cliente@example.com                                                                       CARTOLA            DESDE                 HASTA                      PAGINA
+                42                                                                                                   30/06/2025            31/07/2025                 1 de 1
+
+                 DETALLE DE MOVIMIENTOS                                                                              SALDOS DIARIOS
+
+FECHA      SUCURSAL                                   DESCRIPCION                                 Nº DCTO            CHEQUES Y OTROS                   DEPOSITOS Y OTROS                           SALDO
+                                                                                                                         CARGOS                             ABONOS
+
+05/07 Agustinas Traspaso a Cuenta de Otro Banco                                                                                  300.000                                                               700.000
+10/07 O.Gerencia 0123456789 Transf a JUAN PEREZ                                                    111111                        150.000                                                               550.000
+15/07 Agustinas 0987654321 SUELDO EMPRESA XYZ                                                      222222                                                               500.000                      1.050.000
+20/07 G.Finanzas Abono Transferencia                                                                                                                                    200.000
+30/07 Agustinas COM.MANTENCION PLAN                                                                                               26.702
+
+                           Resumen de Comisiones
+                           *********************
+30/07 Agustinas            COM.MANTENCION PLAN                                                                                    26.702
+
+
+ INFORMACION DE CUENTA CORRIENTE
+        SALDO INICIAL               DEPOSITOS           OTROS ABONOS         CHEQUES              OTROS CARGOS                     IMPUESTOS                       SALDO FINAL
+
+            1.000.000                       0                      700.000                    0                    476.702                            0                        1.223.298
+

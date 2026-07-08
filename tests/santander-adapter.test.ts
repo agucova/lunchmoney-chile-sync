@@ -2,6 +2,7 @@
 // construction (the exact bodies/headers the bank's API expects), sub-account fan-out,
 // balance facets, error classification, and adapter-level drift guards.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { fetchSantanderData } from "../src/adapters/santander/index.ts";
 import { formatRutCliente, SantanderClient } from "../src/adapters/santander/client.ts";
 import { assertIsoDate } from "../src/core/dates.ts";
@@ -31,8 +32,55 @@ interface RecordedCall {
   body: Record<string, unknown>;
 }
 
+/** ultCartolaHistorica response: a listing (CODERR 00) or "none this month" (CODERR 16). */
+function cartolaListing(present: { closeDate: string; account: string } | null): unknown {
+  const consulta: Record<string, unknown> = {
+    INFO: {
+      CODERR: present ? "00" : "16",
+      DESERR: present ? "OK" : "sin datos",
+      MSGUSUARIO: "",
+    },
+  };
+  if (present) {
+    consulta["OUTPUT"] = {
+      Escalares: { ESTADORESULTADO: "0" },
+      MATRIZ: [
+        { NUMEROCARTOLA: " 42", NUMEROCUENTA: present.account, FECHADESDE: present.closeDate },
+      ],
+    };
+  }
+  return {
+    METADATA: { STATUS: "0", DESCRIPCION: "OK" },
+    DATA: { AS_TIB_ConsultaUltCartolaHistorica: consulta },
+  };
+}
+
+/** buzonVirtual response: a base64 %PDF- wrapper (the bytes are decoded by pdftotext, stubbed). */
+function cartolaPdf(): unknown {
+  return {
+    METADATA: { STATUS: "0", DESCRIPCION: "OK" },
+    DATA: {
+      OUTPUT: {
+        INFO: { CODERR: "00", DESERR: "Operación exitosa." },
+        FILE: Buffer.from("%PDF-1.4\nstub\n%%EOF").toString("base64"),
+      },
+    },
+  };
+}
+
+interface CartolaStub {
+  /** ultCartolaHistorica response per MESCONSULTA; default: absent (CODERR 16) every month. */
+  list?: (month: string) => unknown;
+  /** buzonVirtual response; "error"/"auth" force HTTP 503/401. Default: a valid PDF wrapper. */
+  pdf?: unknown | "error" | "auth";
+}
+
 /** Fetch stub speaking the fixture set, recording every call for request assertions. */
-function makeFetch(inventory: unknown = fixtures.inventory, billedResponse?: unknown | "error") {
+function makeFetch(
+  inventory: unknown = fixtures.inventory,
+  billedResponse?: unknown | "error",
+  cartola?: CartolaStub,
+) {
   const calls: RecordedCall[] = [];
   const impl = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -40,6 +88,15 @@ function makeFetch(inventory: unknown = fixtures.inventory, billedResponse?: unk
     calls.push({ url, headers: (init?.headers ?? {}) as Record<string, string>, body });
 
     const json = (payload: unknown) => new Response(JSON.stringify(payload), { status: 200 });
+    if (url.includes("ultCartolaHistorica")) {
+      const month = String((body["INPUT"] as Record<string, unknown>)["MESCONSULTA"]);
+      return json(cartola?.list ? cartola.list(month) : cartolaListing(null));
+    }
+    if (url.includes("buzonVirtual")) {
+      if (cartola?.pdf === "error") return new Response("nope", { status: 503 });
+      if (cartola?.pdf === "auth") return new Response("nope", { status: 401 });
+      return json(cartola?.pdf ?? cartolaPdf());
+    }
     if (url.includes("cruceProductosOnline")) return json(inventory);
     if (url.includes("current-accounts/transactions")) {
       if (body["currency"] === "USD") return json(fixtures.checkingNoData);
@@ -257,5 +314,174 @@ describe("fetchSantanderData", () => {
       "credit_card:CLP",
       "credit_card:USD",
     ]);
+  });
+});
+
+describe("cartola backfill (SANTANDER_CARTOLA_MONTHS)", () => {
+  // A stub `pdftotext` (via SANTANDER_PDFTOTEXT) emits a fixed cartola text so the parse+filter+
+  // merge path runs without poppler. The statement is June 2026 with rows straddling the live
+  // feed's oldest date (2026-06-29 PAYROLL) — the overlap filter must drop rows on/after it.
+  const STUB_DIR = `${process.env["TMPDIR"] ?? "/tmp"}/santander-cartola-stub`;
+  const W = 210;
+  const place = (parts: Array<[number, string]>): string => {
+    const b = Array<string>(W).fill(" ");
+    for (const [c, s] of parts) for (let i = 0; i < s.length; i++) b[c + i] = s[i] as string;
+    return b.join("").replace(/\s+$/, "");
+  };
+  const rt = (end: number, s: string): [number, string] => [end - s.length, s];
+  const JUNE_CARTOLA =
+    [
+      place([
+        [16, "42"],
+        [117, "01/06/2026"],
+        [139, "30/06/2026"],
+        [166, "1 de 1"],
+      ]),
+      place([
+        [0, "FECHA"],
+        [11, "SUCURSAL"],
+        [54, "DESCRIPCION"],
+        [98, "Nº DCTO"],
+        [117, "CHEQUES Y OTROS"],
+        [151, "DEPOSITOS Y OTROS"],
+        [195, "SALDO"],
+      ]),
+      place([[0, "15/06"], [6, "Agustinas"], [16, "Pago Servicio A"], rt(136, "100.000")]),
+      place([[0, "20/06"], [6, "Agustinas"], [16, "Deposito B"], rt(175, "300.000")]),
+      place([[0, "29/06"], [6, "Agustinas"], [16, "Pago Servicio C"], rt(136, "50.000")]),
+      place([[0, "30/06"], [6, "Agustinas"], [16, "Pago Servicio D"], rt(136, "25.000")]),
+      place([[1, "INFORMACION DE CUENTA CORRIENTE"]]),
+      place([
+        [8, "SALDO INICIAL"],
+        [36, "DEPOSITOS"],
+        [56, "OTROS ABONOS"],
+        [77, "CHEQUES"],
+        [98, "OTROS CARGOS"],
+        [131, "IMPUESTOS"],
+        [163, "SALDO FINAL"],
+      ]),
+      place([
+        rt(21, "1.000.000"),
+        rt(45, "0"),
+        rt(74, "300.000"),
+        rt(95, "0"),
+        rt(122, "175.000"),
+        rt(151, "0"),
+        rt(184, "1.125.000"),
+      ]),
+    ].join("\n") + "\n";
+
+  beforeAll(() => {
+    mkdirSync(STUB_DIR, { recursive: true });
+    const textPath = `${STUB_DIR}/cartola.txt`;
+    writeFileSync(textPath, JUNE_CARTOLA);
+    const stubPath = `${STUB_DIR}/pdftotext`;
+    writeFileSync(stubPath, `#!/bin/sh\ncat "${textPath}"\n`); // ignore stdin/args, emit the text
+    chmodSync(stubPath, 0o755);
+    process.env["SANTANDER_PDFTOTEXT"] = stubPath;
+  });
+
+  afterAll(() => {
+    delete process.env["SANTANDER_PDFTOTEXT"];
+    rmSync(STUB_DIR, { recursive: true, force: true });
+  });
+
+  test("off by default: no cartola endpoints are called when the knob is unset", async () => {
+    const { impl, calls } = makeFetch();
+    await fetchSantanderData(CREDENTIALS, {}, { fetchImpl: impl, today: TODAY });
+    expect(calls.some((c) => c.url.includes("ultCartolaHistorica"))).toBe(false);
+    expect(calls.some((c) => c.url.includes("buzonVirtual"))).toBe(false);
+  });
+
+  test("merges statement rows OLDER than the live feed's reach, excluding the overlap", async () => {
+    // June statement exists; other probed months don't → exactly one PDF fetched.
+    const { impl, calls } = makeFetch(fixtures.inventory, undefined, {
+      list: (month) =>
+        month === "06"
+          ? cartolaListing({ closeDate: "2026-06-30", account: "000012345678" })
+          : cartolaListing(null),
+    });
+    const results = await fetchSantanderData(
+      CREDENTIALS,
+      {},
+      { fetchImpl: impl, today: TODAY, cartolaMonths: 3 },
+    );
+
+    expect(calls.filter((c) => c.url.includes("ultCartolaHistorica"))).toHaveLength(3);
+    expect(calls.filter((c) => c.url.includes("buzonVirtual"))).toHaveLength(1);
+
+    const checkingClp = results.get("checking:CLP");
+    const dates = (checkingClp?.facets.transactions ?? []).map((t) => String(t.date)).sort();
+    // 3 live (06-29, 07-01, 07-02) + 2 cartola BEFORE the boundary (06-15, 06-20). The cartola
+    // 06-29 and 06-30 rows are dropped (on/after the live feed's oldest date 2026-06-29).
+    expect(dates).toEqual(["2026-06-15", "2026-06-20", "2026-06-29", "2026-07-01", "2026-07-02"]);
+    expect(dates.filter((d) => d === "2026-06-29")).toHaveLength(1); // no double-count
+    expect(dates.includes("2026-06-30")).toBe(false); // overlap row excluded
+
+    // buzonVirtual request: dash-formatted contract + YYYYMMDD close date + CUENTAS_AR doc type.
+    const pdfCall = calls.find((c) => c.url.includes("buzonVirtual"));
+    const pdfInput = pdfCall?.body["INPUT"] as Record<string, unknown>;
+    expect(pdfInput["contrato"]).toBe("0-000-12-34567-8");
+    expect(pdfInput["fechaInicio"]).toBe("20260630");
+    expect(pdfInput["tipoDocumento"]).toBe("CUENTAS_AR");
+  });
+
+  test("a month with no statement (CODERR 16) fetches no PDF; checking stays live-only", async () => {
+    const { impl, calls } = makeFetch(fixtures.inventory, undefined, {
+      list: () => cartolaListing(null), // every month absent
+    });
+    const results = await fetchSantanderData(
+      CREDENTIALS,
+      {},
+      { fetchImpl: impl, today: TODAY, cartolaMonths: 3 },
+    );
+    expect(calls.some((c) => c.url.includes("buzonVirtual"))).toBe(false);
+    expect(results.get("checking:CLP")?.facets.transactions).toHaveLength(3);
+  });
+
+  test("a failing cartola PDF degrades to live-only (no regression)", async () => {
+    const { impl } = makeFetch(fixtures.inventory, undefined, {
+      list: (month) =>
+        month === "06"
+          ? cartolaListing({ closeDate: "2026-06-30", account: "000012345678" })
+          : cartolaListing(null),
+      pdf: "error", // buzonVirtual → HTTP 503
+    });
+    const results = await fetchSantanderData(
+      CREDENTIALS,
+      {},
+      { fetchImpl: impl, today: TODAY, cartolaMonths: 3 },
+    );
+    expect(results.get("checking:CLP")?.facets.transactions).toHaveLength(3); // live only
+  });
+
+  test("AuthError from a cartola endpoint propagates (token manager must re-harvest)", async () => {
+    const { impl } = makeFetch(fixtures.inventory, undefined, {
+      list: (month) =>
+        month === "06"
+          ? cartolaListing({ closeDate: "2026-06-30", account: "000012345678" })
+          : cartolaListing(null),
+      pdf: "auth", // buzonVirtual → HTTP 401
+    });
+    expect(
+      fetchSantanderData(CREDENTIALS, {}, { fetchImpl: impl, today: TODAY, cartolaMonths: 3 }),
+    ).rejects.toThrow(AuthError);
+  });
+
+  test("checking:CLP only — the USD checking leg does not fetch cartolas", async () => {
+    const { impl, calls } = makeFetch(fixtures.inventory, undefined, {
+      list: (month) =>
+        month === "06"
+          ? cartolaListing({ closeDate: "2026-06-30", account: "000012345678" })
+          : cartolaListing(null),
+    });
+    await fetchSantanderData(CREDENTIALS, {}, { fetchImpl: impl, today: TODAY, cartolaMonths: 3 });
+    // One CONTRATO (the CLP checking contract) is probed — the USD leg is skipped entirely.
+    const contratos = new Set(
+      calls
+        .filter((c) => c.url.includes("ultCartolaHistorica"))
+        .map((c) => (c.body["INPUT"] as Record<string, unknown>)["CONTRATO"]),
+    );
+    expect(contratos).toEqual(new Set(["000012345678"]));
   });
 });
