@@ -99,6 +99,7 @@ export class LunchMoneyClient {
   async insertTransactions(txns: readonly InsertTxnRequest[]): Promise<InsertOutcome[]> {
     if (txns.length === 0) return [];
     const raw = await this.request("POST", "/transactions", {
+      apply_rules: true, // otherwise synced txns never see the user's LM rules (verified: default false)
       transactions: txns.map((txn) => ({
         date: txn.date,
         amount: txn.amount.toDecimalString(),

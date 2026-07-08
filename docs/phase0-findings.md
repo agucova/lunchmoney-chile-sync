@@ -79,7 +79,7 @@ request_transaction}` — **duplicate replays return the existing LM id**, so cr
 | 1xxxxx | Santander Línea de Crédito               | credit (other), usd |
 | 1xxxxx | Línea de Crédito Banco de Chile          | credit (other), clp |
 | 1xxxxx | Racional Stocks                          | investment, usd     |
-| 1xxxxx | Racional Cash                            | investment, usd     |
+| 1xxxxx | Racional Cash                            | cash, usd           |
 | 1xxxxx | Santander CC Universitaria (stale, 0)    | checking, clp       |
 | 1xxxxx | Inheritance                              | investment, clp     |
 
@@ -108,3 +108,38 @@ The CLP/USD asset _pairs_ per card match the planned international-purchase desi
 - Capture a USD international purchase pair (unbilled USD → billed CLP) when one occurs.
 - 2FA challenge frequency: keep counting across future runs (currently 0/2).
 - Nix packaging sanity check (node/bun + chromium pinning) — deferred to Phase 1 deploy.
+
+## Santander checking history: the cartola endpoints (2026-07-08)
+
+The `current-accounts/transactions` (openbanking host) feed silently caps at ~60–90 days
+regardless of `openingDate` — no error, no pagination. Historical checking movements come
+from the monthly **cartola** (statement), a two-step flow on `api-dsk.santander.cl/perdsk`,
+delivered as a base64 PDF exactly like the USD card `estadoDeCuenta`:
+
+**List** — `POST /perdsk/datosCliente/ultCartolaHistorica` with `INPUT` fields `ENTIDAD` (0035),
+`PRODUCTO` (00), `CONTRATO` (the 12-digit account), `MESCONSULTA` (MM), `ANOCONSULTA` (YYYY).
+Returns `DATA.AS_TIB_ConsultaUltCartolaHistorica.INFO.CODERR`: `00` = statement exists, `16` =
+none that month (e.g. the current incomplete month). On success `OUTPUT.MATRIZ[0]` carries
+`NUMEROCARTOLA`, `NUMEROCUENTA` (12-digit) and `FECHADESDE` (the ISO statement close date).
+History reaches at least 12 months (verified back to 07/2025).
+
+**Download** — `POST /perdsk/datosCliente/buzonVirtual` with `INPUT` fields `formato` (PDF),
+`contrato` (the 12-digit account dash-formatted 1-3-2-5-1, e.g. `001234567890` becomes
+`0-012-34-56789-0`), `rutCliente`, `fechaInicio` and `fechaFin` (both the close date as
+YYYYMMDD), and `tipoDocumento` (CUENTAS_AR). Returns `DATA.OUTPUT.FILE` (a base64 PDF) with
+`INFO.CODERR` `00` on success.
+
+PDF layout (`pdftotext -layout`): table `FECHA(dd/mm) | SUCURSAL | DESCRIPCION | Nº DCTO |
+CHEQUES Y OTROS CARGOS | DEPOSITOS Y OTROS ABONOS | SALDO`; a row carries a value in the
+CARGOS _or_ ABONOS column (by horizontal position), SALDO is the running balance. Year is not
+on the row — take it from the statement period. A "Resumen de Comisiones" block at the end
+repeats commission rows (exclude to avoid double-count). Reconciliation footer under
+`INFORMACION DE CUENTA CORRIENTE`: `SALDO INICIAL | DEPOSITOS | OTROS ABONOS | CHEQUES |
+OTROS CARGOS | IMPUESTOS | SALDO FINAL` — gate: `INICIAL + DEPOSITOS + OTROS_ABONOS − CHEQUES
+− OTROS_CARGOS − IMPUESTOS == SALDO_FINAL`, and parsed debit/credit sums must match those
+totals (same fail-closed discipline as usd-statement.ts).
+
+cabecera constants (frontend verbatim): `HOST:{ "USUARIO-ALT":"GHOBP","TERMINAL-ALT":"","CANAL-ID":"078" },
+CanalFisico:"003", CanalLogico:"74", InfoDispositivo:"003", InfoGeneral:{ NumeroServidor:"01" }`
+plus RutCliente/RutUsuario. (DocRecientes / consultaCampana / refreshtoken also fire in the
+cartola view but aren't needed for movement backfill.)
