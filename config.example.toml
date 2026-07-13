@@ -174,3 +174,25 @@ currency = "CLP"
 lm_account_id = 100008
 sources = ["betterplan"]
 match = { sub = "31502" }
+
+# ── Categorization (optional) ────────────────────────────────────────────────
+# Payee → Lunch Money category, applied at plan time so synced transactions land
+# already categorized (instead of relying on LM's server-side rules). Rules are an
+# ordered list; the FIRST whose pattern matches the payee wins, and a payee matching
+# nothing is inserted uncategorized. `pattern` is a case-insensitive regular expression
+# (single-quote it so regex backslashes stay literal); `category_id` is the numeric id
+# of an LM leaf category (GET https://dev.lunchmoney.app/v1/categories?format=flattened).
+# Order specific merchants before broad ones — e.g. "AWS" before "AMAZON", "UBER EATS"
+# before "UBER" — or the broad rule will swallow the specific one.
+[[categorization]]
+pattern = 'AMAZON WEB SERVICES|\bAWS\b|RENDER\.COM|\bRAILWAY\b'
+category_id = 100101 # e.g. Software & AI › Cloud & Hosting
+[[categorization]]
+pattern = 'UBER ?\*? ?EATS|\bRAPPI\b|CORNERSHOP|DOORDASH'
+category_id = 100102 # e.g. Food & Dining › Food Delivery
+[[categorization]]
+pattern = 'UBER ?\*? ?TRIP|CABIFY|\bDIDI\b'
+category_id = 100103 # e.g. Transport › Rideshare
+[[categorization]]
+pattern = 'AMAZON|MERCADOLIBRE|ALIEXPRESS'
+category_id = 100104 # e.g. Shopping › Marketplaces

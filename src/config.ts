@@ -100,6 +100,30 @@ const ConfigSchema = z
     }),
     connections: z.record(z.string(), ConnectionSchema),
     accounts: z.array(AccountSchema).min(1),
+    // Ordered payee → category rules; first match wins, applied at plan time so synced
+    // transactions arrive categorized. Patterns are validated here (fail closed at load)
+    // so a bad regex never surfaces as a 3am sync crash.
+    categorization: z
+      .array(
+        z.object({
+          pattern: z
+            .string()
+            .min(1)
+            .refine(
+              (p) => {
+                try {
+                  new RegExp(p);
+                  return true;
+                } catch {
+                  return false;
+                }
+              },
+              { message: "invalid regular expression" },
+            ),
+          category_id: z.number().int().positive(),
+        }),
+      )
+      .default([]),
   })
   .superRefine((config, ctx) => {
     const ids = new Set<string>();

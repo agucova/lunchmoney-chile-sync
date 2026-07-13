@@ -28,6 +28,8 @@ export interface InsertTxnOp {
   /** Already in LM sign convention. */
   readonly amount: Money;
   readonly payee: string;
+  /** LM leaf category from the payee rules; absent when no rule matched. */
+  readonly categoryId?: number;
 }
 
 export interface SetBalanceOp {

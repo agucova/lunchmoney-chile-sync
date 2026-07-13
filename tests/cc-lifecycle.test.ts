@@ -16,6 +16,7 @@ const TODAY = assertIsoDate("2026-07-06");
 const CONFIG: Config = {
   lunchmoney: { token_env: "LUNCHMONEY_TOKEN" },
   state: { db_path: ":memory:" },
+  categorization: [],
   connections: {
     santander: { type: "obc", obc_bank: "santander", rut_env: "X_RUT", password_env: "X_PASS" },
   },

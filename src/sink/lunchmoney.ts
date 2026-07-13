@@ -42,6 +42,8 @@ export interface InsertTxnRequest {
   readonly payee: string;
   readonly lmAccountId: number;
   readonly externalId: string;
+  /** LM leaf category id; omitted from the request when absent (inserts uncategorized). */
+  readonly categoryId?: number;
 }
 
 export interface InsertOutcome {
@@ -107,6 +109,7 @@ export class LunchMoneyClient {
         payee: txn.payee,
         manual_account_id: txn.lmAccountId,
         external_id: txn.externalId,
+        ...(txn.categoryId === undefined ? {} : { category_id: txn.categoryId }),
       })),
     });
     const parsed = InsertResponseSchema.safeParse(raw);

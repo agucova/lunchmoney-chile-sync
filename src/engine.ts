@@ -4,6 +4,7 @@
 // planned again; duplicate inserts recover the existing id).
 
 import type { AccountConfig, Config, ConnectionConfig } from "./config.ts";
+import { categorizePayee, compileCategoryRules, type CategoryRule } from "./core/categorize.ts";
 import { daysBetween } from "./core/dates.ts";
 import { SyncError } from "./core/errors.ts";
 import {
@@ -274,9 +275,18 @@ function ingestCreditCard(
 }
 
 /** Plan ops for one account from ledger + fetch state. Pure read of state. */
-function planAccount(db: Db, account: AccountConfig, fetched: FetchResult): SyncOp[] {
+function planAccount(
+  db: Db,
+  account: AccountConfig,
+  fetched: FetchResult,
+  categoryRules: readonly CategoryRule[],
+): SyncOp[] {
   const ops: SyncOp[] = [];
   for (const identity of identitiesAwaitingLm(db, account.id)) {
+    const payee = identity.installments
+      ? `${identity.rawDesc} (${identity.installments})`
+      : identity.rawDesc;
+    const categoryId = categorizePayee(payee, categoryRules);
     ops.push({
       op: "insert_txn",
       accountId: account.id,
@@ -285,9 +295,8 @@ function planAccount(db: Db, account: AccountConfig, fetched: FetchResult): Sync
       externalId: identity.externalId,
       date: identity.date,
       amount: toLunchMoneyAmount(identity.amount, account.kind),
-      payee: identity.installments
-        ? `${identity.rawDesc} (${identity.installments})`
-        : identity.rawDesc,
+      payee,
+      ...(categoryId === undefined ? {} : { categoryId }),
     });
   }
   const balance = fetched.facets.balance;
@@ -338,6 +347,7 @@ async function applyOps(
         payee: op.payee,
         lmAccountId: op.lmAccountId,
         externalId: op.externalId,
+        ...(op.categoryId === undefined ? {} : { categoryId: op.categoryId }),
       })),
     );
     for (let i = 0; i < batch.length; i++) {
@@ -363,6 +373,7 @@ async function applyOps(
 
 export async function sync(deps: EngineDeps, options: SyncOptions): Promise<ConnectionReport[]> {
   const { config, db, log, notify } = deps;
+  const categoryRules = compileCategoryRules(config.categorization);
   const selected = config.accounts.filter(
     (account) => !options.accountIds || options.accountIds.includes(account.id),
   );
@@ -415,7 +426,7 @@ export async function sync(deps: EngineDeps, options: SyncOptions): Promise<Conn
       }
 
       const ingested = ingestAccount(db, runId, account, fetched);
-      const ops = planAccount(db, account, fetched);
+      const ops = planAccount(db, account, fetched, categoryRules);
       accountReports.push({ accountId: account.id, ...ingested, ops });
 
       log(
