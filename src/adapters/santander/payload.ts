@@ -168,9 +168,11 @@ export function parseInventory(payload: unknown): SantanderProduct[] {
       glosa: entry.GLOSACORTA.trim(),
       group: group as SantanderProductGroup,
       currency,
-      available: parseCentavos(entry.MONTODISPONIBLE, currency),
-      used: parseCentavos(entry.MONTOUTILIZADO, currency),
-      cupo: parseCentavos(entry.CUPO, currency),
+      // Balances round: a CLP card's used/available can carry FX centavos from an
+      // international purchase settling to pesos (transaction amounts stay strict).
+      available: parseCentavos(entry.MONTODISPONIBLE, currency, "round"),
+      used: parseCentavos(entry.MONTOUTILIZADO, currency, "round"),
+      cupo: parseCentavos(entry.CUPO, currency, "round"),
     };
   });
 }
@@ -243,7 +245,7 @@ export function parseCheckingTransactions(
       );
     }
     const rawDescription = movement.observation.trim() || movement.expandedCode.trim();
-    const runningBalance = parseCentavos(movement.newBalance, currency);
+    const runningBalance = parseCentavos(movement.newBalance, currency, "round");
     return {
       date: parseBankDate(movement.transactionDate, "iso"),
       amount,

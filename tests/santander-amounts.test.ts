@@ -48,8 +48,23 @@ describe("parseCentavos (checking movementAmount / balances)", () => {
     expect(parseCentavos("00000000000010080-", "USD").minor).toBe(-10080n);
   });
 
-  test("a CLP centavos field with non-zero cents is schema drift", () => {
+  test("a CLP centavos field with non-zero cents is schema drift (strict is the default)", () => {
     expect(() => parseCentavos("000000000000000150", "CLP")).toThrow(SchemaDriftError);
+    expect(() => parseCentavos("000000000000000150", "CLP", "reject")).toThrow(SchemaDriftError);
+  });
+
+  test('subUnit "round": a CLP BALANCE with FX centavos rounds half-up to whole pesos', () => {
+    // The real drift that broke a sync: a CLP card MONTOUTILIZADO of 5.031.890,20.
+    expect(parseCentavos("000000000503189020", "CLP", "round").minor).toBe(5031890n); // .20 → down
+    expect(parseCentavos("000000000503189088", "CLP", "round").minor).toBe(5031891n); // .88 → up
+    expect(parseCentavos("000000000000000150", "CLP", "round").minor).toBe(2n); // .50 → half-up
+    expect(parseCentavos("000000000000000149", "CLP", "round").minor).toBe(1n); // .49 → down
+    expect(parseCentavos("00000250000020-", "CLP", "round").minor).toBe(-2500000n); // sign kept
+    expect(parseCentavos("000000532498500", "CLP", "round").minor).toBe(5324985n); // exact, no rounding
+  });
+
+  test('subUnit "round" leaves 2-decimal currencies (USD) untouched', () => {
+    expect(parseCentavos("000000000000264335", "USD", "round").minor).toBe(264335n);
   });
 
   test("property: CLP centavos round-trips digits/100 exactly, no float", () => {

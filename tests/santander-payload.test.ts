@@ -40,6 +40,17 @@ describe("parseInventory", () => {
     expect(cardClp?.contract).toBe(cardUsd?.contract);
   });
 
+  test("a CLP card balance carrying FX centavos rounds, instead of failing the whole inventory", () => {
+    // The real drift that broke a live sync: the CLP Visa's MONTOUTILIZADO came back as
+    // 5.031.890,20 (centavos from a USD purchase settled to pesos). Balances round; no throw.
+    const withCents = clone(fixtures.inventory);
+    const cardClp = withCents.DATA.OUTPUT.MATRICES.MATRIZCAPTACIONES.e1[3];
+    if (!cardClp) throw new Error("fixture shape");
+    cardClp.MONTOUTILIZADO = "000000000503189020";
+    const products = parseInventory(withCents);
+    expect(products[3]?.used.minor).toBe(5031890n);
+  });
+
   test("an unknown product group is SchemaDrift, not a guess", () => {
     const bad = clone(fixtures.inventory);
     const entry = bad.DATA.OUTPUT.MATRICES.MATRIZCAPTACIONES.e1[0];

@@ -77,7 +77,15 @@ const okVerify: Outcome = {
   status: 200,
   body: { idToken: "tok_123", refreshToken: "r", expiresIn: "3600" },
 };
-const okPositions: Outcome = { status: 200, body: racionalFixture.positions };
+// Stamp pricing to "yesterday" relative to the run, mirroring a live fetch — otherwise the
+// fixture's fixed date eventually crosses the adapter's 7-day staleness guard and these
+// (staleness-agnostic) tests rot. The guard itself is covered in racional-payload.test.ts
+// with explicit past/future dates.
+const recentlyPricedPositions = racionalFixture.positions.map((p) => ({
+  ...p,
+  lastUpdated: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+}));
+const okPositions: Outcome = { status: 200, body: recentlyPricedPositions };
 const okBuyingPower: Outcome = { status: 200, body: racionalFixture.buyingPower };
 
 describe("racional adapter", () => {

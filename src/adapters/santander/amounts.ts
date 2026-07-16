@@ -7,8 +7,10 @@
 //      CLP "1.430.960" → 1 430 960 pesos;  USD "100,00" → 100.00;  USD "1.234,56".
 //
 // 2. Fixed-width centavos (checking `movementAmount`, inventory `MONTODISPONIBLE`):
-//    an integer in hundredths with an optional trailing "-" for debit. CLP is encoded
-//    with two implied decimals too, always ".00".
+//    an integer in hundredths with an optional trailing "-" for debit. CLP transaction
+//    amounts are whole pesos (".00"); a CLP *balance* can carry centavos when an
+//    international (USD) purchase settles to CLP, so balance fields round (parseCentavos
+//    `subUnit`) while transaction amounts stay strict.
 //      "000000532498500" → 5 324 985.00;  "00000250000000-" → −250 000.00.
 
 import { CURRENCY_EXPONENT, type CurrencyCode, Money } from "../../core/money.ts";
@@ -42,11 +44,20 @@ const CENTAVOS_RE = /^(\d+)(-?)$/;
 
 /**
  * Parse a fixed-width centavos field (2 implied decimals, optional trailing "-").
- * For currencies with fewer than 2 decimal places (CLP), the hundredths must be zero —
- * a non-zero fraction is schema drift (fractional pesos don't exist), not something to
- * silently round.
+ *
+ * When the currency carries fewer than two decimals (CLP: whole pesos), how to treat a
+ * non-zero fraction depends on WHAT the field is — hence `subUnit`:
+ *   - "reject" (default): a fractional peso on a posted TRANSACTION is impossible, so it
+ *     means the amount drifted (e.g. a foreign value misdenominated) — fail closed.
+ *   - "round": a BALANCE snapshot legitimately gains centavos when an international (USD)
+ *     purchase settles to CLP, and LM's CLP asset stores whole pesos anyway — round half-up
+ *     to the currency's resolution instead of rejecting a real balance.
  */
-export function parseCentavos(raw: string, currency: CurrencyCode): Money {
+export function parseCentavos(
+  raw: string,
+  currency: CurrencyCode,
+  subUnit: "reject" | "round" = "reject",
+): Money {
   const match = CENTAVOS_RE.exec(raw.trim());
   if (!match) throw new SchemaDriftError(`unparseable centavos field: ${JSON.stringify(raw)}`);
   const digits = match[1] as string;
@@ -56,21 +67,43 @@ export function parseCentavos(raw: string, currency: CurrencyCode): Money {
   const fracPart = padded.slice(-2);
   const exponent = CURRENCY_EXPONENT[currency];
   const canonical =
-    exponent >= 2 ? `${intPart}.${fracPart}` : mergeToExponent(intPart, fracPart, exponent);
+    exponent >= 2
+      ? `${intPart}.${fracPart}`
+      : collapseToExponent(intPart, fracPart, exponent, subUnit, raw);
   const magnitude = decimalOrDrift(canonical, currency, raw);
   return negative ? magnitude.negate() : magnitude;
 }
 
-/** Collapse 2-decimal centavos onto a lower-exponent currency, asserting no loss. */
-function mergeToExponent(intPart: string, fracPart: string, exponent: number): string {
-  const keep = fracPart.slice(0, exponent);
+/**
+ * Collapse a 2-decimal centavos magnitude onto a currency with `exponent` decimals (CLP: 0).
+ * An exact value (dropped digits all zero) passes through unchanged; a real fraction either
+ * fails closed ("reject") or rounds half-up to the currency's resolution ("round"). Pure
+ * BigInt arithmetic — the magnitude never touches a float.
+ */
+function collapseToExponent(
+  intPart: string,
+  fracPart: string,
+  exponent: number,
+  subUnit: "reject" | "round",
+  raw: string,
+): string {
   const drop = fracPart.slice(exponent);
-  if (!/^0*$/.test(drop)) {
+  if (/^0*$/.test(drop)) {
+    return exponent === 0 ? intPart : `${intPart}.${fracPart.slice(0, exponent)}`;
+  }
+  if (subUnit === "reject") {
     throw new SchemaDriftError(
-      `centavos field has sub-unit precision for a ${exponent}-decimal currency: .${fracPart}`,
+      `centavos field has sub-unit precision for a ${exponent}-decimal currency: .${fracPart} ` +
+        `(${JSON.stringify(raw)})`,
     );
   }
-  return exponent === 0 ? intPart : `${intPart}.${keep}`;
+  // Round half-up to `exponent` decimals, working in hundredths (fracPart is exactly 2 digits).
+  const hundredths = BigInt(intPart + fracPart);
+  const divisor = 10n ** BigInt(2 - exponent);
+  const rounded = (hundredths + divisor / 2n) / divisor; // value in units of 10^-exponent
+  if (exponent === 0) return rounded.toString();
+  const s = rounded.toString().padStart(exponent + 1, "0");
+  return `${s.slice(0, -exponent)}.${s.slice(-exponent)}`;
 }
 
 const BILLED_MONTO_RE = /^\d+$/;
