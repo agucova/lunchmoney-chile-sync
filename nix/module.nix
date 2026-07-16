@@ -63,9 +63,10 @@ in
 
     systemd.services.lunchmoney-chile-sync = {
       description = "Lunch Money Chile sync";
-      # poppler_utils provides `pdftotext`, used to read the USD (international) credit-card
-      # statement PDF (the only source for USD billed history).
-      path = [ pkgs.poppler_utils ] ++ cfg.extraPackages;
+      # poppler provides `pdftotext`, used to read the USD (international) credit-card
+      # statement PDF (the only source for USD billed history). Renamed poppler_utils →
+      # poppler-utils in nixpkgs; the fallback keeps this working on either.
+      path = [ (pkgs.poppler-utils or pkgs.poppler_utils) ] ++ cfg.extraPackages;
       environment = {
         OBC_CHROME_PATH = lib.getExe cfg.chromiumPackage;
         SYNC_DRIFT_DIR = "/var/lib/lunchmoney-chile-sync/drift";
