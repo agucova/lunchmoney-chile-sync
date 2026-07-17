@@ -8,10 +8,16 @@
       systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      # Production node_modules as a fixed-output derivation. All runtime deps are
-      # pure JS (the scraper is a vendored prebuilt tarball), so the tree — and its
-      # hash — is platform-independent. Dep changes: rebuild fails on hash mismatch,
-      # copy the new hash from the error.
+      # Production node_modules as a fixed-output derivation. bun's installed tree varies
+      # by platform (optional-dependency resolution differs across OS/arch), so the FOD
+      # hash is per-system. Recompute a system's hash after a dep change (or on a new
+      # platform) by building it and copying the "got:" value from the hash-mismatch error.
+      nodeModulesHashes = {
+        aarch64-darwin = "sha256-afYr111dzPFXl/tZfRjR7Y1f9wj1saQYUJkXa813OfQ=";
+        aarch64-linux = "sha256-YRZKcU3uLRN9quCtYuvgJEEc7b8Y5wpmdCOo27crWag=";
+        # Assumed identical to aarch64-linux (both Linux); unverified — recompute if built.
+        x86_64-linux = "sha256-YRZKcU3uLRN9quCtYuvgJEEc7b8Y5wpmdCOo27crWag=";
+      };
       nodeModulesFor = pkgs: pkgs.stdenvNoCC.mkDerivation {
         pname = "lunchmoney-chile-sync-node-modules";
         version = "0";
@@ -32,7 +38,7 @@
         '';
         outputHashAlgo = "sha256";
         outputHashMode = "recursive";
-        outputHash = "sha256-afYr111dzPFXl/tZfRjR7Y1f9wj1saQYUJkXa813OfQ=";
+        outputHash = nodeModulesHashes.${pkgs.stdenv.hostPlatform.system};
       };
 
       packageFor = pkgs:
