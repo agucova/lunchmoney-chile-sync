@@ -127,6 +127,7 @@ holding, all monetary fields in **USD**:
   "breakdown": {
     "cashAvailableForTrade": 2500.0,
     "cashAvailableForWithdrawal": 65.46,
+    "cashBalance": 65.46, // added upstream 2026-09; settled cash, can be < buyingPower
     "amountUSD": 2500.0,
     "cashFromSellsInTransit": 0,
     "usedDriveWealthValue": true,
@@ -142,6 +143,10 @@ holding, all monetary fields in **USD**:
 - `cashSettling` / `cashFromSellsInTransit` semantics are unverified (both 0 in capture). v1
   ignores them and uses `buyingPower` alone; during a settlement window synced cash may
   transiently understate. Known-unknown, not a guessed formula.
+- `cashBalance` appeared upstream in 2026-09. In the capture that introduced it,
+  `buyingPower` (8272.12) exceeded `cashBalance` (5687.63) with `cashSettling` and
+  `cashFromSellsInTransit` both 0 — consistent with a pending deposit counting toward buying
+  power before settlement, but unverified. v1 keeps pushing `buyingPower` unchanged.
 
 ## 3. Verified cross-checks
 

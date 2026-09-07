@@ -61,6 +61,9 @@ const BuyingPowerSchema = z
       .object({
         cashAvailableForTrade: z.number().finite(),
         cashAvailableForWithdrawal: z.number().finite(),
+        // Settled cash. Observed to diverge from buyingPower (pending deposits count toward
+        // buying power before they settle); semantics unverified, so v1 still pushes buyingPower.
+        cashBalance: z.number().finite(),
         amountUSD: z.number().finite(),
         cashFromSellsInTransit: z.number().finite(),
         usedDriveWealthValue: z.boolean(),
